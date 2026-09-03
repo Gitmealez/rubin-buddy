@@ -122,7 +122,7 @@ goes, so unlike a pidfile a crash can't leave a stale one behind.
 
 ## What he says
 
-Around 270 lines in `~/.rubin-buddy/lines.txt`, one per line, `#` for comments,
+Around 300 lines in `~/.rubin-buddy/lines.txt`, one per line, `#` for comments,
 grouped into two dozen themes (the file is the source of truth for the count). He re-reads the file every time he speaks, so **edits land
 live** — no rebuild, no restart.
 
@@ -146,6 +146,8 @@ theme:
 | ~90 minutes at the machine without a real break | *The world* — "The screen will wait. The sunset won't." |
 | A single task runs past ~10 minutes | He sits down and keeps watch; when it finally lands, the Finishing line is guaranteed |
 | Your first arrival of the day (after 4+ hours away) | *Beginnings* / *Practice* — "Begin badly. Begin anyway." |
+| Back after three or more days away | *Return* instead — "You were gone. Good." |
+| Friday, the first quiet moment after 5pm | *Week's end* — "Enough for this week." Once a week |
 
 Contextual lines share a 15-minute cooldown so he never gets chatty about it,
 respect Silent mode, and fall back to the whole deck if you rename the groups.
@@ -185,6 +187,11 @@ version and macOS build. If he crashed or vanished, attach
 `~/Library/Logs/rubin-buddy.log` — it contains only his own errors, nothing
 personal. Or file directly: [issues](https://github.com/otniel-bit/rubin-buddy/issues),
 or email [gonzalezot16@gmail.com](mailto:gonzalezot16@gmail.com) if GitHub isn't your thing.
+
+Got a line he should say? There's a
+[Suggest a line](https://github.com/otniel-bit/rubin-buddy/issues/new?template=suggest-a-line.md)
+template — short, original phrasing, in his voice. Lines that land get added to
+the deck and ship to everyone on the next update.
 
 ## Uninstall
 
@@ -329,7 +336,14 @@ Clicking him mid-breath means "enough"; he stands, nothing more. Scriptable via
 ### Mornings, and what he last said
 
 Your first activity of each day earns one line, leaning toward *Beginnings* and
-*Practice*. And if you catch a bubble vanishing and wonder what it was, the
+*Practice*. Come back from three or more days away — a trip, a weekend off the
+grid — and it's a *Return* line instead ("The work kept. So did you."); he keeps
+a once-a-minute note of when he last saw you so the gap survives the restart
+that being gone usually involves. Late on a Friday, the first moment he's idle
+and you're there, one *Week's end* line — once per week, and a Friday evening
+that never goes quiet simply gets none.
+
+And if you catch a bubble vanishing and wonder what it was, the
 menu shows `He said: "…"` — click it to copy the line.
 
 ### Shade transitions

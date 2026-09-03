@@ -1289,9 +1289,24 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// A gap in your activity this long makes the next activity an "arrival" —
     /// the thing a morning greeting is actually about.
     static var arrivalGap: TimeInterval = 4 * 60 * 60
+    /// A gap this long — a trip, a weekend off the grid — is a return, and
+    /// gets its own words instead of the ordinary morning line.
+    static var returnGap: TimeInterval = 3 * 24 * 60 * 60
+    /// The week's-end line: first quiet moment at or after this hour, this
+    /// weekday (Calendar numbering, Sunday = 1, so Friday = 6). Once a week.
+    static var weekEndWeekday = 6
+    static var weekEndHour = 17
 
-    /// Wall clock of the last poll that saw you active; nil until the first.
-    private var lastActiveAt: Date?
+    /// Wall clock of the last poll that saw you active. Persisted (throttled),
+    /// because the return greeting has to know how long you were gone across
+    /// the restart that being gone usually involves.
+    private var lastActiveAt: Date? = {
+        let t = UserDefaults.standard.double(forKey: "buddyLastActive")
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }()
+    private static let lastActiveKey = "buddyLastActive"
+    private static let weekEndKey = "buddyWeekEnd"
+    private var activePollsSinceSave = 0
     /// Wall clock of the previous poll, whatever it saw. A large gap here means
     /// the Mac was asleep — polls don't run while it sleeps.
     private var lastPollAt = Date()
@@ -1324,9 +1339,15 @@ final class Buddy: NSObject, NSMenuDelegate {
 
             // An arrival is activity after a real gap (or the first since
             // launch) — NOT the date flipping at midnight under your hands.
-            let isArrival = lastActiveAt.map { now.timeIntervalSince($0) >= Self.arrivalGap } ?? true
-            if isArrival { greetTheMorning() }
+            let gap = lastActiveAt.map { now.timeIntervalSince($0) }
+            if gap.map({ $0 >= Self.arrivalGap }) ?? true { greetTheMorning(after: gap ?? 0) }
             lastActiveAt = now
+            activePollsSinceSave += 1
+            if activePollsSinceSave >= 60 {   // once a minute is plenty for a three-day question
+                activePollsSinceSave = 0
+                UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.lastActiveKey)
+            }
+            greetTheWeekEnd(now)
 
             // The break nudge belongs here, while you're present — firing it
             // into an empty room both wasted the line and reset the clock.
@@ -1385,7 +1406,9 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// One line for your first arrival of the day, leaning toward beginnings.
     /// The day is only marked once he actually says it, so a blocked attempt
     /// (bubble up, cooldown) retries on a later poll instead of skipping a day.
-    private func greetTheMorning() {
+    /// `gap` is how long you'd been away. Past `returnGap` it stops being a
+    /// morning and becomes a return, which has its own things to say.
+    private func greetTheMorning(after gap: TimeInterval) {
         let day = ISO8601DateFormatter.string(
             from: Date(), timeZone: .current,
             formatOptions: [.withFullDate])
@@ -1393,7 +1416,23 @@ final class Buddy: NSObject, NSMenuDelegate {
         let now = Date()
         guard canSpeakContextual(now) else { return }
         UserDefaults.standard.set(day, forKey: Self.greetDayKey)
-        speakContextual(["beginnings and endings", "practice"], at: now)
+        let groups = gap >= Self.returnGap ? ["return"] : ["beginnings and endings", "practice"]
+        speakContextual(groups, at: now)
+    }
+
+    /// Late on a Friday, the first moment he's idle and you're there: one line
+    /// about the week being over. Once per week; a busy Friday evening that
+    /// never goes quiet simply gets none.
+    private func greetTheWeekEnd(_ now: Date) {
+        let cal = Calendar.current
+        guard cal.component(.weekday, from: now) == Self.weekEndWeekday,
+              cal.component(.hour, from: now) >= Self.weekEndHour,
+              currentAnimation == "idle", pendingTarget == nil else { return }
+        let week = "\(cal.component(.yearForWeekOfYear, from: now))-W\(cal.component(.weekOfYear, from: now))"
+        guard UserDefaults.standard.string(forKey: Self.weekEndKey) != week,
+              canSpeakContextual(now) else { return }
+        UserDefaults.standard.set(week, forKey: Self.weekEndKey)
+        speakContextual(["week's end"], at: now)
     }
 
     private func canSpeakContextual(_ now: Date) -> Bool {
@@ -1882,6 +1921,9 @@ if env["RUBIN_CTX_FAST"] == "1" {
     Buddy.meditateAfter = 15
     Buddy.busyStaleAfter = 60
     Buddy.arrivalGap = 40
+    Buddy.returnGap = 90
+    Buddy.weekEndWeekday = Calendar.current.component(.weekday, from: Date())
+    Buddy.weekEndHour = 0
     Buddy.longTaskAfter = 18
 }
 // Testing only: pretend it's the middle of the night.
