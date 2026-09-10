@@ -26,6 +26,10 @@ on:
       - update.sh
       - hooks.sh
       - state.sh
+      - session-event.py
+      - build-site.js
+      - build-mac.sh
+      - tests/**
       - uninstall.sh
 
 permissions:
@@ -60,6 +64,12 @@ jobs:
       - name: Shell syntax check
         run: for f in install.sh update.sh hooks.sh state.sh uninstall.sh; do sh -n "$f"; done
 
+      - name: Session and hook regression checks
+        run: |
+          python3 tests/check_sessions.py
+          python3 tests/check_models.py
+          node --check site/preview.js
+
       - name: Rebuild frames from sprite.js
         run: node build.js
 
@@ -85,12 +95,15 @@ jobs:
           printf '%s' "$major.$minor.$((patch + 1))" > VERSION
           echo "Released $(cat VERSION) (was $current)" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Refresh website preview and stable installer
+        run: node build-site.js
+
       - name: Commit and push (with retry)
         run: |
           set -eu
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add VERSION frames preview.png
+          git add VERSION frames preview.png site/preview-data.js site/idle.png site/working.png site/waiting.png site/seated.png site/icon.png site/install.sh
           git commit -m "Release $(cat VERSION)"
           # A docs-only push can land while this runs; rebase and retry rather
           # than losing the release.

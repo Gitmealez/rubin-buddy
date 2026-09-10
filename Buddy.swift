@@ -13,6 +13,138 @@
 import AppKit
 import Darwin
 
+// A separate suite lets integration checks run without touching a user's Rick.
+let appDirectory = Bundle.main.bundleURL.pathExtension == "app"
+    ? (Bundle.main.resourceURL ?? Bundle.main.bundleURL) : Bundle.main.bundleURL
+
+let preferences: UserDefaults = ProcessInfo.processInfo.environment["RUBIN_PREFS_SUITE"]
+    .flatMap { UserDefaults(suiteName: $0) } ?? .standard
+
+struct AgentSession: Codable {
+    let id: String
+    let project: String
+    let phase: String
+    let detail: String
+    let updated: Double
+    let event: String
+    let provider: String?
+    var agentName: String { provider == "codex" ? "Codex" : "Claude" }
+
+    func effectivePhase(at now: Double) -> String {
+        // Silence is not evidence of completion. Keep an unresolved wait until
+        // that session resumes/ends; label stale work as unknown rather than done.
+        if phase == "working", now - updated > 1800 { return "unknown" }
+        return phase
+    }
+
+    static func ordered(_ sessions: [AgentSession], at now: Double,
+                        acknowledged: [String: Double]) -> [AgentSession] {
+        let priority = ["waiting": 5, "ready": 4, "working": 3, "unknown": 2, "idle": 1]
+        return sessions.filter {
+            $0.phase != "ended" && now - $0.updated < 7 * 86400
+                && ($0.phase != "ready" || (acknowledged[$0.id] ?? 0) < $0.updated)
+        }.sorted {
+            let a = priority[$0.effectivePhase(at: now)] ?? 0
+            let b = priority[$1.effectivePhase(at: now)] ?? 0
+            return a == b ? $0.updated > $1.updated : a > b
+        }
+    }
+}
+
+final class CompanionPanel: NSViewController {
+    let statusLabel = NSTextField(wrappingLabelWithString: "Keeping you company")
+    let detailLabel = NSTextField(wrappingLabelWithString: "")
+    let thoughtLabel = NSTextField(wrappingLabelWithString: "")
+    let focusButton = NSButton(title: "Sit with me · 25 minutes", target: nil, action: nil)
+    let breathButton = NSButton(title: "Take a breath · 1 minute", target: nil, action: nil)
+    let keepButton = NSButton(title: "Keep this thought", target: nil, action: nil)
+    let quietButton = NSButton(title: "A little quiet · 1 hour", target: nil, action: nil)
+    let reviewButton = NSButton(title: "Clear reviewed completions", target: nil, action: nil)
+    let noticeLabel = NSTextField(wrappingLabelWithString: "")
+    var onAction: ((String) -> Void)?
+    var icon: NSImage?
+
+    override func loadView() {
+        let surface = NSVisualEffectView()
+        surface.material = .popover
+        surface.state = .active
+        view = surface
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 11
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(stack)
+        NSLayoutConstraint.activate([
+            surface.widthAnchor.constraint(equalToConstant: 346),
+            stack.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 22),
+            stack.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -22),
+            stack.topAnchor.constraint(equalTo: surface.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -20),
+        ])
+        let title = NSTextField(labelWithString: "Rick")
+        title.font = NSFont(name: "Georgia", size: 26) ?? .systemFont(ofSize: 26)
+        let subtitle = NSTextField(labelWithString: "A little company for the work.")
+        subtitle.textColor = .secondaryLabelColor
+        let heading = NSStackView(views: [title, subtitle])
+        heading.orientation = .vertical
+        heading.alignment = .leading
+        let sprite = NSImageView()
+        sprite.image = icon
+        sprite.imageScaling = .scaleProportionallyUpOrDown
+        sprite.widthAnchor.constraint(equalToConstant: 39).isActive = true
+        sprite.heightAnchor.constraint(equalToConstant: 51).isActive = true
+        let top = NSStackView(views: [sprite, heading])
+        top.spacing = 14
+        stack.addArrangedSubview(top)
+        func add(_ child: NSView) {
+            stack.addArrangedSubview(child)
+            child.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
+        func line() { let rule = NSBox(); rule.boxType = .separator; add(rule) }
+        line()
+        statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        detailLabel.font = .systemFont(ofSize: 12)
+        detailLabel.textColor = .secondaryLabelColor
+        add(statusLabel); add(detailLabel)
+        thoughtLabel.font = NSFont(name: "Georgia", size: 19) ?? .systemFont(ofSize: 19)
+        add(thoughtLabel)
+        func action(_ button: NSButton, _ name: String) {
+            button.identifier = NSUserInterfaceItemIdentifier(name)
+            let symbols = ["keep":"bookmark", "picture":"photo.on.rectangle", "focus":"sun.max", "breath":"wind", "quiet":"moon", "review":"checkmark"]
+            if let symbol = symbols[name] { button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil); button.imagePosition = .imageLeading }
+            button.target = self; button.action = #selector(clicked(_:))
+            button.bezelStyle = .rounded
+            button.controlSize = .large
+            button.alignment = .left
+            add(button)
+        }
+        action(keepButton, "keep")
+        action(NSButton(title: "Copy picture to share", target: nil, action: nil), "picture")
+        line()
+        action(focusButton, "focus")
+        action(breathButton, "breath")
+        action(quietButton, "quiet")
+        action(reviewButton, "review")
+        let footer = NSStackView()
+        footer.distribution = .fillEqually
+        for (label, name) in [("Saved thoughts", "saved"), ("Settings", "settings")] {
+            let button = NSButton(title: label, target: self, action: #selector(clicked(_:)))
+            button.identifier = NSUserInterfaceItemIdentifier(name)
+            button.bezelStyle = .rounded
+            footer.addArrangedSubview(button)
+        }
+        add(footer)
+        noticeLabel.font = .systemFont(ofSize: 12)
+        noticeLabel.textColor = .secondaryLabelColor
+        add(noticeLabel)
+    }
+
+    @objc private func clicked(_ sender: NSButton) {
+        if let name = sender.identifier?.rawValue { onAction?(name) }
+    }
+}
+
 let PAPER = NSColor(srgbRed: 0.965, green: 0.953, blue: 0.925, alpha: 1)  // beard white
 let INK = NSColor(srgbRed: 0.090, green: 0.071, blue: 0.059, alpha: 1)  // outline
 
@@ -58,7 +190,7 @@ func snappedPixelSize(scale: Double, screen: NSScreen?) -> Double {
 /// the build succeeds — so a broken commit upstream can't leave you with a
 /// buddy that won't start.
 enum Updater {
-    static let repo = "otniel-bit/rubin-buddy"
+    static let repo = "Gitmealez/rubin-buddy"
     static let branch = "main"
 
     /// The contents API, not raw.githubusercontent.com. Raw serves a cached copy
@@ -74,7 +206,7 @@ enum Updater {
         URL(string: "https://raw.githubusercontent.com/\(repo)/\(branch)/VERSION")!
     }
     static var installerURL: URL {
-        URL(string: "https://raw.githubusercontent.com/\(repo)/\(branch)/install.sh")!
+        URL(string: "https://rick-buddy.netlify.app/install.sh")!
     }
 
     /// Numeric compare, so 1.10.0 correctly beats 1.9.0 — a plain string
@@ -371,9 +503,9 @@ final class BubbleView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current else { return }
-        let p = pixel
+        let p = min(pixel, 2)
         let tail = p * Self.tailDepth
-        let cut = p  // one-pixel corner bevel
+        let cut = p * 3  // soft bevel, while preserving the pixel character
 
         let body = NSRect(
             x: 0, y: tailDown ? tail : 0, width: bounds.width, height: bounds.height - tail)
@@ -402,14 +534,14 @@ final class BubbleView: NSView {
         // Hard edges on the bevels and the tail — this is meant to look drawn
         // on a grid, not vector-smooth.
         ctx.saveGraphicsState()
-        ctx.shouldAntialias = false
+        ctx.shouldAntialias = true
         PAPER.setFill()
         path.fill()
         // Stroking at 2x width against the path's own clip leaves a border
         // exactly `pixel` thick, all the way around the tail included.
         path.addClip()
         INK.setStroke()
-        path.lineWidth = p * 2
+        path.lineWidth = 1.5
         path.stroke()
         ctx.restoreGraphicsState()
 
@@ -432,7 +564,7 @@ final class Bubble {
     private let view = BubbleView()
     private var hideWork: DispatchWorkItem?
 
-    private static let maxTextWidth: Double = 190
+    private static let maxTextWidth: Double = 260
 
     init() {
         window = NSWindow(
@@ -440,7 +572,7 @@ final class Bubble {
             styleMask: .borderless, backing: .buffered, defer: false)
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.hasShadow = false
+        window.hasShadow = true
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .stationary]
         window.ignoresMouseEvents = true  // never in the way of a click
@@ -453,8 +585,10 @@ final class Bubble {
         _ text: String, over buddy: NSRect, pixel: Double, screen: NSScreen?,
         duration: Double? = nil
     ) {
-        let fontSize = max(10.0, (pixel * 4).rounded())
-        let font = NSFont(name: "Monaco", size: fontSize)
+        let pixel = min(pixel, 2)
+        let savedSize = preferences.double(forKey: "buddyTextSize")
+        let fontSize = savedSize > 0 ? max(13, min(22, savedSize)) : 15
+        let font = NSFont(name: "Georgia", size: fontSize)
             ?? .monospacedSystemFont(ofSize: fontSize, weight: .medium)
 
         let attrs: [NSAttributedString.Key: Any] = [.font: font]
@@ -484,6 +618,8 @@ final class Bubble {
         x = min(max(x, area.minX + 4), area.maxX - w - 4)
 
         view.text = text
+        view.setAccessibilityElement(true)
+        view.setAccessibilityLabel(text)
         view.pixel = pixel
         view.font = font
         view.wrapWidth = Self.maxTextWidth
@@ -532,6 +668,25 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private let bubble = Bubble()
     private var statusItem: NSStatusItem?
+    private var companionWindow: NSPanel?
+    private var companionPanel: CompanionPanel?
+    private var savedWindow: NSPanel?
+    private var sessions: [AgentSession] = []
+    private var lastSessionEvent = ""
+    private var sessionCache: [String: (Date, AgentSession)] = [:]
+    private var acknowledged = preferences.dictionary(forKey: "buddyReviewed") as? [String: Double] ?? [:]
+    private var focusUntil: Date? = {
+        let time = preferences.double(forKey: "buddyFocusUntil")
+        return time > Date().timeIntervalSince1970 ? Date(timeIntervalSince1970: time) : nil
+    }()
+    private var isFocusing: Bool { focusUntil.map { $0 > Date() } ?? false }
+    private var showStatusLabel: Bool {
+        preferences.object(forKey: "buddyShowStatus") as? Bool ?? true
+    }
+    private var keptThoughts: [String] {
+        get { preferences.stringArray(forKey: "buddyKeptThoughts") ?? [] }
+        set { preferences.set(newValue, forKey: "buddyKeptThoughts") }
+    }
     private var pixel: Double = 4
     private var requestedScale: Double
     /// Guards against re-entering the resize from the notification it posts.
@@ -561,7 +716,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// filtered against this — the theme pools are small (a dozen lines), and
     /// drawing WITH replacement from them made same-day repeats near-certain.
     private var recentLines: [String] =
-        UserDefaults.standard.stringArray(forKey: "buddyRecentLines") ?? []
+        preferences.stringArray(forKey: "buddyRecentLines") ?? []
     private static let recentKey = "buddyRecentLines"
     private static let recentCap = 50
 
@@ -603,13 +758,13 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     /// The last thing he said, surfaced in the menu for anyone who caught the
     /// bubble vanishing and wondered.
-    private var lastSaid = ""
+    private var lastSaid = preferences.string(forKey: "buddyLastThought") ?? ""
 
     /// Quiet for an Hour: every unprompted mouth stays shut until this passes.
     /// Persisted, because an auto-update restarting him mid-meeting must not
     /// un-mute him. Explicit asks (clicks, Say Something, the breath) still work.
     private var quietUntil =
-        Date(timeIntervalSince1970: UserDefaults.standard.double(forKey: "buddyQuietUntil"))
+        Date(timeIntervalSince1970: preferences.double(forKey: "buddyQuietUntil"))
     private static let quietKey = "buddyQuietUntil"
     private var inQuietHour: Bool { Date() < quietUntil }
 
@@ -690,10 +845,10 @@ final class Buddy: NSObject, NSMenuDelegate {
         self.linesFile = linesFile
         // Precedence: an explicit env/argument beats the remembered menu choice
         // (you typed it, you meant it); the menu choice beats the default.
-        let stored = UserDefaults.standard.double(forKey: Self.scaleKey)
+        let stored = preferences.double(forKey: Self.scaleKey)
         self.requestedScale = Buddy.scaleFromLaunch ? scale : (stored > 0 ? stored : scale)
 
-        let here = Bundle.main.bundleURL
+        let here = appDirectory
         self.localVersion =
             (try? String(contentsOf: here.appendingPathComponent("VERSION"), encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.0.0"
@@ -710,7 +865,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         super.init()
 
         if !Buddy.chatterFromLaunch,
-            let stored = UserDefaults.standard.string(forKey: Self.chatterKey),
+            let stored = preferences.string(forKey: Self.chatterKey),
             let match = Self.chatterChoices.first(where: { $0.0 == stored })
         {
             Self.quietSecondsRange = match.1
@@ -733,6 +888,8 @@ final class Buddy: NSObject, NSMenuDelegate {
         let size = spriteSize()
         window.setFrame(NSRect(origin: savedOrigin(size: size), size: size), display: false)
 
+        view.setAccessibilityElement(true)
+        view.setAccessibilityLabel("Rick. Click for a thought; right-click for settings.")
         view.onGrab = { [weak self] in self?.bubble.hide() }
         view.onClick = { [weak self] in
             guard let self else { return }
@@ -741,6 +898,7 @@ final class Buddy: NSObject, NSMenuDelegate {
                 self.cancelBreath(standUp: true)
                 return
             }
+            if self.isFocusing { self.speakLine(); return }
             // Waiting on you, eyes on you: a nod would drop the shades and lose
             // the waiting posture. He's already giving you his attention.
             if self.currentAnimation == "look" {
@@ -775,11 +933,19 @@ final class Buddy: NSObject, NSMenuDelegate {
         scheduleNextLine()
         scheduleNextFidget()
 
+        if !preferences.bool(forKey: "buddyWelcome2") {
+            preferences.set(true, forKey: "buddyWelcome2")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                guard let self, !self.inQuietHour, Buddy.quietSecondsRange != nil else { return }
+                self.say("A little company. Click my menu bar head for a breath, a thought, or a quiet sit.")
+            }
+        }
+
         // First run ever: say something soon, so a new user learns he talks
         // without waiting the usual several minutes for the first line.
         let firstRunKey = "buddyHasRun"
-        if !UserDefaults.standard.bool(forKey: firstRunKey) {
-            UserDefaults.standard.set(true, forKey: firstRunKey)
+        if !preferences.bool(forKey: firstRunKey) {
+            preferences.set(true, forKey: firstRunKey)
             DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
                 guard let self, !self.isBreathing, !self.bubble.isVisible, !self.inQuietHour else { return }
                 self.speakLine()
@@ -796,8 +962,9 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
         RunLoop.main.add(tickTimer, forMode: .common)
         timer = tickTimer
+        if isFocusing { request("meditate") }
 
-        log("bundle=\(Bundle.main.bundleURL.path) managed=\(isManagedInstall) v=\(localVersion)")
+        log("bundle=\(appDirectory.path) managed=\(isManagedInstall) v=\(localVersion)")
         if isManagedInstall {
             // Not at the instant of launch — logging in is busy enough already.
             let delay =
@@ -863,7 +1030,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private func applyScale(_ scale: Double) {
         requestedScale = scale
-        UserDefaults.standard.set(scale, forKey: Self.scaleKey)
+        preferences.set(scale, forKey: Self.scaleKey)
         let snapped = snappedPixelSize(scale: scale, screen: anchorScreen())
         adjustingScale = true
         defer { adjustingScale = false }
@@ -885,7 +1052,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private static func storedOriginPoint() -> NSPoint? {
         guard
-            let saved = UserDefaults.standard.dictionary(forKey: originKey) as? [String: Double],
+            let saved = preferences.dictionary(forKey: originKey) as? [String: Double],
             let x = saved["x"], let y = saved["y"]
         else { return nil }
         return NSPoint(x: x, y: y)
@@ -903,7 +1070,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private func saveOrigin() {
         let origin = window.frame.origin
-        UserDefaults.standard.set(
+        preferences.set(
             ["x": Double(origin.x), "y": Double(origin.y)], forKey: Self.originKey)
     }
 
@@ -918,6 +1085,16 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// routes into and out of sitting through sitdown/standup.
     private func request(_ name: String) {
         guard let target = sprites.animations[name] else { return }
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            var resting = name
+            var visited = Set<String>()
+            while let next = sprites.animations[resting]?.next, !visited.contains(next) {
+                visited.insert(resting); resting = next
+            }
+            pendingTarget = nil
+            play(resting)
+            return
+        }
 
         // Leaving the floor: anything that isn't sitting goes through standup.
         if Self.sittingStates.contains(currentAnimation), !Self.sittingStates.contains(name),
@@ -983,7 +1160,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         if Buddy.quietSecondsRange != nil {
             ticksUntilSpeaking -= 1
             if ticksUntilSpeaking <= 0 {
-                if !bubble.isVisible && window.isVisible && !isBreathing && !inQuietHour { speakLine() }
+                if !bubble.isVisible && window.isVisible && !isBreathing && !inQuietHour && !isFocusing && companionWindow?.isVisible != true { speakLine() }
                 scheduleNextLine()
             }
         }
@@ -1001,6 +1178,9 @@ final class Buddy: NSObject, NSMenuDelegate {
         ticksSincePresencePoll += 1
         if ticksSincePresencePoll >= Self.ticksPerSecond {
             ticksSincePresencePoll = 0
+            pollSessions()
+            pollFocus()
+            refreshPanel()
             pollPresence()
         }
 
@@ -1019,7 +1199,8 @@ final class Buddy: NSObject, NSMenuDelegate {
                 }
                 scheduleNextFidget()
             }
-        } else if currentAnimation == "idle", Date() >= nextFidgetAt {
+        } else if currentAnimation == "idle", Date() >= nextFidgetAt, !isFocusing,
+            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             // Never the same gesture twice running — uniform draws clump, and
             // clumping is what reads as "he only ever does one thing."
             let pool = ["stroke", "think", "glasses", "glance", "adjust", "stretch", "tea"]
@@ -1031,7 +1212,8 @@ final class Buddy: NSObject, NSMenuDelegate {
             }
         }
 
-        guard let animation, !animation.frames.isEmpty else { return }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let animation, !animation.frames.isEmpty else { return }
         ticksOnFrame += 1
         guard ticksOnFrame >= max(1, animation.frames[frameIndex].hold) else { return }
 
@@ -1089,7 +1271,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             let text = String(name.dropFirst(4))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .prefix(140)
-            guard !text.isEmpty, !isBreathing, !inQuietHour else { return }
+            guard !text.isEmpty, !isBreathing, !inQuietHour, !isFocusing else { return }
             lastSaid = String(text)
             if Buddy.debug {
                 FileHandle.standardError.write("say: \(text)\n".data(using: .utf8)!)
@@ -1100,6 +1282,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
         guard !name.isEmpty, sprites.animations[name] != nil else { return }
         noteStateEvent(name)
+        guard !isFocusing, !isBreathing else { return }
         // Seated for a long run: more of the same work is not a reason to stand.
         // Anything that ISN'T the same work (nod, glasses, idle) still is.
         if sitReason == "long", ["think", "stroke"].contains(name) { return }
@@ -1125,8 +1308,6 @@ final class Buddy: NSObject, NSMenuDelegate {
         } else {
             scheduleNextFidget()
         }
-        // And it trumps a guided breath — the incoming state change re-poses him.
-        cancelBreath(standUp: false)
 
         if name == "glasses" || name == "look" {
             if waitingSince == nil {
@@ -1168,7 +1349,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// The gate for lines important enough to skip the cooldown — still never
     /// in Silent mode, over another bubble, mid-breath, or while hidden.
     private func canSpeakIgnoringCooldown() -> Bool {
-        Buddy.quietSecondsRange != nil && window.isVisible && !bubble.isVisible && !isBreathing
+        Buddy.quietSecondsRange != nil && window.isVisible && !bubble.isVisible && !isBreathing && !isFocusing && companionWindow?.isVisible != true
             && !inQuietHour
     }
 
@@ -1214,11 +1395,12 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private func noteSpoken(_ line: String) {
         lastSaid = line
+        preferences.set(line, forKey: "buddyLastThought")
         recentLines.append(line)
         if recentLines.count > Self.recentCap {
             recentLines.removeFirst(recentLines.count - Self.recentCap)
         }
-        UserDefaults.standard.set(recentLines, forKey: Self.recentKey)
+        preferences.set(recentLines, forKey: Self.recentKey)
     }
 
     /// Deals from a shuffled deck rather than picking independently, so all of
@@ -1229,8 +1411,8 @@ final class Buddy: NSObject, NSMenuDelegate {
         let hash = Self.stableHash(all.joined(separator: "\n"))
         if !deckRestored {
             deckRestored = true
-            if UserDefaults.standard.string(forKey: Self.deckSourceKey) == hash,
-                let saved = UserDefaults.standard.stringArray(forKey: Self.deckKey),
+            if preferences.string(forKey: Self.deckSourceKey) == hash,
+                let saved = preferences.stringArray(forKey: Self.deckKey),
                 !saved.isEmpty
             {
                 lineBag = saved
@@ -1242,8 +1424,8 @@ final class Buddy: NSObject, NSMenuDelegate {
             lineBag = all.shuffled()
         }
         guard let line = lineBag.popLast() else { return }
-        UserDefaults.standard.set(lineBag, forKey: Self.deckKey)
-        UserDefaults.standard.set(hash, forKey: Self.deckSourceKey)
+        preferences.set(lineBag, forKey: Self.deckKey)
+        preferences.set(hash, forKey: Self.deckSourceKey)
         if Buddy.debug {
             FileHandle.standardError.write("deck: \(lineBag.count) left\n".data(using: .utf8)!)
         }
@@ -1301,7 +1483,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// because the return greeting has to know how long you were gone across
     /// the restart that being gone usually involves.
     private var lastActiveAt: Date? = {
-        let t = UserDefaults.standard.double(forKey: "buddyLastActive")
+        let t = preferences.double(forKey: "buddyLastActive")
         return t > 0 ? Date(timeIntervalSince1970: t) : nil
     }()
     private static let lastActiveKey = "buddyLastActive"
@@ -1312,6 +1494,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     private var lastPollAt = Date()
 
     private func pollPresence() {
+        guard !isFocusing else { return }
         let now = Date()
         // The machine sleeping IS a break, but the idle clock can't see it:
         // wake the Mac after eight hours and the very first poll reports
@@ -1345,7 +1528,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             activePollsSinceSave += 1
             if activePollsSinceSave >= 60 {   // once a minute is plenty for a three-day question
                 activePollsSinceSave = 0
-                UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.lastActiveKey)
+                preferences.set(now.timeIntervalSince1970, forKey: Self.lastActiveKey)
             }
             greetTheWeekEnd(now)
 
@@ -1412,10 +1595,10 @@ final class Buddy: NSObject, NSMenuDelegate {
         let day = ISO8601DateFormatter.string(
             from: Date(), timeZone: .current,
             formatOptions: [.withFullDate])
-        guard UserDefaults.standard.string(forKey: Self.greetDayKey) != day else { return }
+        guard preferences.string(forKey: Self.greetDayKey) != day else { return }
         let now = Date()
         guard canSpeakContextual(now) else { return }
-        UserDefaults.standard.set(day, forKey: Self.greetDayKey)
+        preferences.set(day, forKey: Self.greetDayKey)
         let groups = gap >= Self.returnGap ? ["return"] : ["beginnings and endings", "practice"]
         speakContextual(groups, at: now)
     }
@@ -1429,14 +1612,14 @@ final class Buddy: NSObject, NSMenuDelegate {
               cal.component(.hour, from: now) >= Self.weekEndHour,
               currentAnimation == "idle", pendingTarget == nil else { return }
         let week = "\(cal.component(.yearForWeekOfYear, from: now))-W\(cal.component(.weekOfYear, from: now))"
-        guard UserDefaults.standard.string(forKey: Self.weekEndKey) != week,
+        guard preferences.string(forKey: Self.weekEndKey) != week,
               canSpeakContextual(now) else { return }
-        UserDefaults.standard.set(week, forKey: Self.weekEndKey)
+        preferences.set(week, forKey: Self.weekEndKey)
         speakContextual(["week's end"], at: now)
     }
 
     private func canSpeakContextual(_ now: Date) -> Bool {
-        Buddy.quietSecondsRange != nil && window.isVisible && !bubble.isVisible
+        Buddy.quietSecondsRange != nil && window.isVisible && !bubble.isVisible && !isFocusing && companionWindow?.isVisible != true
             && !isBreathing  // never interject between "Hold…" and "Out…"
             && !inQuietHour
             && now.timeIntervalSince(lastContextual) >= Self.ctxCooldown
@@ -1474,7 +1657,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     // MARK: updates
 
     private var autoUpdateEnabled: Bool {
-        UserDefaults.standard.object(forKey: Self.autoUpdateKey) as? Bool ?? true
+        preferences.object(forKey: Self.autoUpdateKey) as? Bool ?? true
     }
 
     private func log(_ message: String) {
@@ -1500,7 +1683,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
         guard !updateInFlight else { return }
         // Never yank him out from under a guided breath; the next check gets it.
-        if isBreathing, !userAsked { return }
+        if (isBreathing || isFocusing), !userAsked { return }
         Updater.fetchLatest { [weak self] remote in
             guard let self else { return }
             self.log("update check: remote=\(remote ?? "nil")")
@@ -1513,7 +1696,11 @@ final class Buddy: NSObject, NSMenuDelegate {
                 return
             }
             guard self.isManagedInstall else {
-                if userAsked { self.say("\(remote) is out. Developer build — git pull.") }
+                if userAsked {
+                    self.say(Bundle.main.bundleURL.pathExtension == "app"
+                        ? "\(remote) is out. Visit rick-buddy.netlify.app to update."
+                        : "\(remote) is out. Developer build — git pull.")
+                }
                 return
             }
             guard !self.updateInFlight else { return }
@@ -1551,6 +1738,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             cancelBreath(standUp: true)
             return
         }
+        finishFocus(announce: false)
         cancelFidget()
         window.orderFrontRegardless()  // a hidden Rick pacing breaths is just noise
         request("meditate")
@@ -1571,7 +1759,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         let done = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.breathWork.removeAll()
-            self.request("idle")  // he stands; no line — the silence is part of it
+            self.restoreAgentPose()  // back to the current session, without chatter
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + at + 0.5, execute: done)
         breathWork.append(done)
@@ -1582,7 +1770,309 @@ final class Buddy: NSObject, NSMenuDelegate {
         breathWork.forEach { $0.cancel() }
         breathWork.removeAll()
         bubble.hide()
-        if standUp { request("idle") }
+        if standUp { restoreAgentPose() }
+    }
+
+    // MARK: companion panel, quiet sits, and thoughts
+
+    private var sessionTitle: String {
+        guard let session = sessions.first else { return (hooksWired || codexHooksWired) ? "Waiting for session activity" : "Keeping you company" }
+        switch session.effectivePhase(at: Date().timeIntervalSince1970) {
+        case "waiting": return "\(session.agentName) needs you"
+        case "working": return "\(session.agentName) is working"
+        case "ready": return "Ready for your review"
+        case "unknown": return "Check your \(session.agentName) session"
+        default: return "\(session.agentName) is connected"
+        }
+    }
+
+    private func pollSessions() {
+        let directory = stateFile.deletingLastPathComponent().appendingPathComponent("sessions")
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        let paths = Set(files.filter { $0.pathExtension == "json" }.map(\.path))
+        sessionCache = sessionCache.filter { paths.contains($0.key) }
+        for file in files where file.pathExtension == "json" {
+            guard let stamp = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate else { continue }
+            if sessionCache[file.path]?.0 == stamp { continue }
+            guard let data = try? Data(contentsOf: file), data.count < 8192,
+                  let session = try? JSONDecoder().decode(AgentSession.self, from: data) else {
+                sessionCache.removeValue(forKey: file.path); continue
+            }
+            sessionCache[file.path] = (stamp, session)
+        }
+        let all = sessionCache.values.map { $0.1 }
+        let now = Date().timeIntervalSince1970
+        sessions = AgentSession.ordered(all, at: now, acknowledged: acknowledged)
+        let currentIDs = Set(all.map(\.id))
+        acknowledged = acknowledged.filter { currentIDs.contains($0.key) }
+        let signature = sessions.first.map { "\($0.id):\($0.effectivePhase(at: now)):\($0.updated)" } ?? "none"
+        guard signature != lastSessionEvent else { return }
+        lastSessionEvent = signature
+        guard let first = sessions.first else {
+            waitingSince = nil; busySince = nil
+            if !isFocusing && !isBreathing { request("idle") }
+            return
+        }
+        let pose = agentPose(first)
+        noteStateEvent(pose)
+        guard !isFocusing, !isBreathing else { return }
+        if pose != currentAnimation && pose != pendingTarget { request(pose) }
+    }
+
+    private func agentPose(_ session: AgentSession) -> String {
+        switch session.effectivePhase(at: Date().timeIntervalSince1970) {
+        case "waiting": return "glasses"
+        case "working": return session.event == "UserPromptSubmit" ? "think" : "stroke"
+        case "ready": return "nod"
+        default: return "idle"
+        }
+    }
+
+    private func restoreAgentPose() {
+        if isFocusing { request("meditate") }
+        else { request(sessions.first.map(agentPose) ?? "idle") }
+    }
+
+    @objc private func openCompanion() {
+        // Wait for a right-click settings menu to finish dismissing.
+        DispatchQueue.main.async { [weak self] in self?.presentCompanion() }
+    }
+
+    private func presentCompanion() {
+        log("open companion")
+        if companionWindow?.isVisible == true { companionWindow?.close(); return }
+        guard let button = statusItem?.button else { return }
+        if companionPanel == nil {
+            let panel = CompanionPanel()
+            panel.icon = sprites.animations["idle"]?.frames.first?.image
+            panel.onAction = { [weak self] action in self?.performCompanionAction(action) }
+            companionPanel = panel
+            _ = panel.view
+        }
+        if lastSaid.isEmpty { speakLine() }
+        refreshPanel()
+        NSApp.activate(ignoringOtherApps: true)
+        guard let content = companionPanel else { return }
+        content.view.layoutSubtreeIfNeeded()
+        if companionWindow == nil {
+            let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 346, height: 520),
+                styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            panel.title = "Rick"
+            panel.isReleasedWhenClosed = false
+            panel.level = .floating
+            panel.contentViewController = content
+            companionWindow = panel
+        }
+        if let panel = companionWindow {
+            panel.setContentSize(NSSize(width: 346, height: content.view.fittingSize.height))
+            let area = (button.window?.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+            let anchor = button.window?.frame.midX ?? area.maxX
+            panel.setFrameOrigin(NSPoint(x: min(max(area.minX + 12, anchor - panel.frame.width / 2), area.maxX - panel.frame.width - 12),
+                y: area.maxY - panel.frame.height - 12))
+            panel.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func performCompanionAction(_ action: String) {
+        switch action {
+        case "focus": toggleFocus()
+        case "breath": takeABreath()
+        case "quiet": toggleQuietHour()
+        case "keep": keepThought()
+        case "picture": copyThoughtPicture()
+        case "saved": companionWindow?.close(); showSavedThoughts()
+        case "review":
+            for session in sessions where session.phase == "ready" { acknowledged[session.id] = session.updated }
+            preferences.set(acknowledged, forKey: "buddyReviewed")
+            pollSessions()
+        case "settings":
+            companionWindow?.close()
+            if let button = statusItem?.button {
+                buildMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.minY), in: button)
+            }
+        default: break
+        }
+        refreshPanel()
+    }
+
+    private func refreshPanel() {
+        let phase = sessions.first?.effectivePhase(at: Date().timeIntervalSince1970)
+        let title: String
+        switch phase {
+        case "waiting": title = " Needs you"
+        case "ready": title = " Ready"
+        case "working": title = " Working"
+        case "unknown": title = " Check session"
+        default: title = ""
+        }
+        statusItem?.button?.title = showStatusLabel ? title : ""
+        statusItem?.button?.toolTip = "Rick · \(sessionTitle)"
+        guard let panel = companionPanel else { return }
+        panel.statusLabel.stringValue = sessionTitle
+        let details = sessions.prefix(4).map { session in
+            let detail = session.effectivePhase(at: Date().timeIntervalSince1970) == "unknown"
+                ? "No recent activity; status unknown" : session.detail
+            return "\(session.agentName) · \(session.project) · \(detail)"
+        }
+        panel.detailLabel.stringValue = details.isEmpty
+            ? (codexHooksWired ? "Open a new session after trusting Rick’s hooks in Codex /hooks." : hooksWired ? "Open a new Claude Code session to see its status." : "Works on his own. Connect Claude Code or Codex in Settings.")
+            : details.joined(separator: "\n") + (sessions.count > 4 ? "\n+\(sessions.count - 4) more sessions" : "")
+        panel.thoughtLabel.stringValue = lastSaid.isEmpty ? "Here when you need me." : "“\(lastSaid)”"
+        panel.keepButton.title = keptThoughts.contains(lastSaid) ? "Thought kept ✓" : "Keep this thought"
+        panel.keepButton.isEnabled = !lastSaid.isEmpty && !keptThoughts.contains(lastSaid)
+        panel.focusButton.title = isFocusing
+            ? "End our sit · \(max(1, Int(ceil(focusUntil!.timeIntervalSinceNow / 60)))) min left"
+            : "Sit with me · 25 minutes"
+        panel.breathButton.title = isBreathing ? "End our breath" : "Take a breath · 1 minute"
+        panel.quietButton.title = inQuietHour ? "End quiet hour" : "A little quiet · 1 hour"
+        panel.reviewButton.isHidden = !sessions.contains { $0.phase == "ready" }
+    }
+
+    @objc private func toggleFocus() {
+        if focusUntil != nil { finishFocus(announce: false); return }
+        cancelBreath(standUp: false)
+        cancelFidget()
+        focusUntil = Date().addingTimeInterval(ProcessInfo.processInfo.environment["RUBIN_CTX_FAST"] == "1" ? 12 : 25 * 60)
+        preferences.set(focusUntil!.timeIntervalSince1970, forKey: "buddyFocusUntil")
+        window.orderFrontRegardless()
+        request("meditate")
+        say("Just this one thing. I’ll sit with you.")
+    }
+
+    private func pollFocus() {
+        if let until = focusUntil, until <= Date() { finishFocus(announce: true) }
+    }
+
+    private func finishFocus(announce: Bool) {
+        guard focusUntil != nil else { return }
+        focusUntil = nil
+        preferences.removeObject(forKey: "buddyFocusUntil")
+        restoreAgentPose()
+        scheduleNextLine(); scheduleNextFidget()
+        if announce && window.isVisible && !inQuietHour && Buddy.quietSecondsRange != nil {
+            say("That was a little space for the work. Take a breath.")
+        }
+    }
+
+    @objc private func keepThought() {
+        guard !lastSaid.isEmpty else { return }
+        var thoughts = keptThoughts
+        if !thoughts.contains(lastSaid) { thoughts.insert(lastSaid, at: 0); keptThoughts = thoughts }
+        companionPanel?.noticeLabel.stringValue = "Saved on this Mac."
+        refreshPanel()
+    }
+
+    private func thoughtPicture(_ text: String) -> NSImage {
+        let image = NSImage(size: NSSize(width: 1000, height: 650))
+        image.lockFocus()
+        PAPER.setFill(); NSRect(x: 0, y: 0, width: 1000, height: 650).fill()
+        let quote = "“\(text)”" as NSString
+        var fontSize: CGFloat = 38
+        while fontSize > 16 {
+            let font = NSFont(name: "Georgia", size: fontSize) ?? .systemFont(ofSize: fontSize)
+            let height = quote.boundingRect(with: NSSize(width: 690, height: 2000),
+                options: [.usesLineFragmentOrigin], attributes: [.font: font]).height
+            if height <= 330 { break }
+            fontSize -= 2
+        }
+        let font = NSFont(name: "Georgia", size: fontSize) ?? .systemFont(ofSize: fontSize)
+        quote.draw(in: NSRect(x: 80, y: 210, width: 710, height: 330),
+                   withAttributes: [.font: font, .foregroundColor: INK])
+        if let sprite = sprites.animations["idle"]?.frames.first?.image {
+            sprite.draw(in: NSRect(x: 810, y: 90, width: 104, height: 136),
+                from: .zero, operation: .sourceOver, fraction: 1,
+                respectFlipped: false, hints: [.interpolation: NSImageInterpolation.none.rawValue])
+        }
+        ("A little company for the work." as NSString).draw(at: NSPoint(x: 80, y: 112),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 20), .foregroundColor: INK])
+        ("rick-buddy.netlify.app" as NSString).draw(at: NSPoint(x: 80, y: 78),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 17), .foregroundColor: INK.withAlphaComponent(0.7)])
+        image.unlockFocus()
+        return image
+    }
+
+    private func copyPicture(_ text: String) {
+        let image = thoughtPicture(text)
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(png, forType: .png)
+        NSPasteboard.general.setData(tiff, forType: .tiff)
+        companionPanel?.noticeLabel.stringValue = "Picture copied. Paste it wherever you like."
+    }
+
+    @objc private func copyThoughtPicture() {
+        guard !lastSaid.isEmpty else { return }
+        copyPicture(lastSaid)
+    }
+
+    @objc private func showSavedThoughts() {
+        if savedWindow == nil {
+            let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 460),
+                styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            panel.title = "Saved thoughts"
+            panel.isReleasedWhenClosed = false
+            panel.minSize = NSSize(width: 360, height: 260)
+            panel.center()
+            savedWindow = panel
+        }
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        let stack = NSStackView()
+        stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 18
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = stack
+        stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive = true
+        let thoughts = keptThoughts
+        if thoughts.isEmpty {
+            stack.addArrangedSubview(NSTextField(wrappingLabelWithString: "A thought worth keeping will find you. Choose Keep This Thought in Rick’s panel."))
+        }
+        for (index, thought) in thoughts.enumerated() {
+            let label = NSTextField(wrappingLabelWithString: thought)
+            label.font = NSFont(name: "Georgia", size: 17) ?? .systemFont(ofSize: 17)
+            label.isSelectable = true
+            stack.addArrangedSubview(label)
+            label.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+            let row = NSStackView()
+            for (title, action) in [("Copy text", #selector(copySaved(_:))), ("Copy picture", #selector(pictureSaved(_:))), ("Remove", #selector(removeSaved(_:)))] {
+                let button = NSButton(title: title, target: self, action: action)
+                button.tag = index; button.bezelStyle = .rounded
+                row.addArrangedSubview(button)
+            }
+            stack.addArrangedSubview(row)
+        }
+        savedWindow?.contentView = scroll
+        NSApp.activate(ignoringOtherApps: true)
+        savedWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func copySaved(_ sender: NSButton) {
+        guard keptThoughts.indices.contains(sender.tag) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(keptThoughts[sender.tag], forType: .string)
+        sender.title = "Copied"
+    }
+    @objc private func pictureSaved(_ sender: NSButton) {
+        guard keptThoughts.indices.contains(sender.tag) else { return }
+        copyPicture(keptThoughts[sender.tag]); sender.title = "Copied"
+    }
+    @objc private func removeSaved(_ sender: NSButton) {
+        var thoughts = keptThoughts
+        guard thoughts.indices.contains(sender.tag) else { return }
+        thoughts.remove(at: sender.tag); keptThoughts = thoughts
+        showSavedThoughts(); refreshPanel()
+    }
+    @objc private func setTextSize(_ sender: NSMenuItem) {
+        preferences.set(sender.tag, forKey: "buddyTextSize")
+        bubble.hide()
+    }
+    @objc private func toggleStatusLabel() {
+        preferences.set(!showStatusLabel, forKey: "buddyShowStatus")
+        refreshPanel()
     }
 
     // MARK: menu bar
@@ -1597,7 +2087,8 @@ final class Buddy: NSObject, NSMenuDelegate {
         item.button?.toolTip = "Rick"
         let menu = NSMenu()
         menu.delegate = self  // rebuilt on open so the check marks are current
-        item.menu = menu
+        item.button?.target = self
+        item.button?.action = #selector(openCompanion)
         statusItem = item
     }
 
@@ -1623,6 +2114,10 @@ final class Buddy: NSObject, NSMenuDelegate {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
 
+        menu.addItem(item("Open Companion", #selector(openCompanion)))
+        menu.addItem(item(isFocusing ? "End Our Sit" : "Sit with Me · 25 Minutes", #selector(toggleFocus)))
+        menu.addItem(item("Saved Thoughts", #selector(showSavedThoughts)))
+        menu.addItem(.separator())
         menu.addItem(
             item(window.isVisible ? "Hide Rick" : "Show Rick", #selector(toggleVisible)))
         menu.addItem(item("Bring Him Back", #selector(bringBackAndShow)))
@@ -1639,6 +2134,15 @@ final class Buddy: NSObject, NSMenuDelegate {
         sizeItem.submenu = sizeMenu
         menu.addItem(sizeItem)
 
+        let textMenu = NSMenu()
+        for size in [13, 15, 18, 22] {
+            let current = preferences.integer(forKey: "buddyTextSize")
+            textMenu.addItem(item("\(size) pt", #selector(setTextSize(_:)),
+                on: size == (current == 0 ? 15 : current), tag: size))
+        }
+        let textItem = NSMenuItem(title: "Text Size", action: nil, keyEquivalent: "")
+        textItem.submenu = textMenu; menu.addItem(textItem)
+        menu.addItem(item("Show Agent Status in Menu Bar", #selector(toggleStatusLabel), on: showStatusLabel))
         let chatterMenu = NSMenu()
         for (i, choice) in Self.chatterChoices.enumerated() {
             chatterMenu.addItem(
@@ -1675,16 +2179,19 @@ final class Buddy: NSObject, NSMenuDelegate {
                 "He said: \u{201C}\(shown)\u{201D} — copy", #selector(copyLastSaid))
             menu.addItem(said)
         }
+        menu.addItem(item("Keep This Thought", #selector(keepThought)))
+        menu.addItem(item("Copy Thought Picture", #selector(copyThoughtPicture)))
         menu.addItem(item("Say Something", #selector(saySomething)))
         menu.addItem(item("Take a Breath", #selector(takeABreath), on: isBreathing))
         menu.addItem(.separator())
         menu.addItem(
             item("Follow Claude Code", #selector(toggleFollowClaude), on: hooksWired))
+        menu.addItem(item("Follow Codex", #selector(toggleFollowCodex), on: codexHooksWired))
         menu.addItem(item("Start at Login", #selector(toggleLoginItem), on: LoginItem.isEnabled))
 
         let versionLabel = NSMenuItem(
             title: isManagedInstall
-                ? "Version \(localVersion)" : "Version \(localVersion) (dev build)",
+                ? "Version \(localVersion)" : "Version \(localVersion) (\(Bundle.main.bundleURL.pathExtension == "app" ? "standalone" : "dev build"))",
             action: nil, keyEquivalent: "")
         versionLabel.isEnabled = false
         menu.addItem(versionLabel)
@@ -1724,7 +2231,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggleAutoUpdate() {
-        UserDefaults.standard.set(!autoUpdateEnabled, forKey: Self.autoUpdateKey)
+        preferences.set(!autoUpdateEnabled, forKey: Self.autoUpdateKey)
     }
 
     @objc private func toggleVisible() {
@@ -1745,7 +2252,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     @objc private func bringBackAndShow() {
         bringBack(persist: true)  // the menu click is intentional; remember it
         window.orderFrontRegardless()
-        request("glasses")  // shades up — he's looking right at you
+        request(isFocusing ? "meditate" : "glasses")
     }
 
     @objc private func setSize(_ sender: NSMenuItem) {
@@ -1757,7 +2264,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// was forgetting to turn him back on — this can't be forgotten.
     @objc private func toggleQuietHour() {
         quietUntil = inQuietHour ? .distantPast : Date().addingTimeInterval(60 * 60)
-        UserDefaults.standard.set(quietUntil.timeIntervalSince1970, forKey: Self.quietKey)
+        preferences.set(quietUntil.timeIntervalSince1970, forKey: Self.quietKey)
         bubble.hide()
     }
 
@@ -1765,12 +2272,13 @@ final class Buddy: NSObject, NSMenuDelegate {
         guard Self.chatterChoices.indices.contains(sender.tag) else { return }
         let choice = Self.chatterChoices[sender.tag]
         Buddy.quietSecondsRange = choice.1
-        UserDefaults.standard.set(choice.0, forKey: Self.chatterKey)
+        preferences.set(choice.0, forKey: Self.chatterKey)
         scheduleNextLine()
     }
 
     @objc private func selectAnimation(_ sender: NSMenuItem) {
         guard let name = sender.representedObject as? String else { return }
+        finishFocus(announce: false)
         cancelFidget()
         request(name)
     }
@@ -1806,7 +2314,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// hooks.sh the terminal path uses, so there is exactly one implementation
     /// of the settings merge.
     @objc private func toggleFollowClaude() {
-        let script = Bundle.main.bundleURL.appendingPathComponent("hooks.sh").path
+        let script = appDirectory.appendingPathComponent("hooks.sh").path
         guard FileManager.default.fileExists(atPath: script) else {
             say("Can't find hooks.sh. Reinstall me.")
             return
@@ -1832,10 +2340,40 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
     }
 
+    private var codexSettingsURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/hooks.json")
+    }
+    private var codexHooksWired: Bool {
+        (try? String(contentsOf: codexSettingsURL, encoding: .utf8))?.contains("# rubin-buddy") ?? false
+    }
+    @objc private func toggleFollowCodex() {
+        let script = appDirectory.appendingPathComponent("hooks.sh").path
+        guard FileManager.default.fileExists(atPath: script) else { say("Reinstall me to connect Codex."); return }
+        let wasWired = codexHooksWired
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = wasWired ? [script, "--codex", "--remove"] : [script, "--codex"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do { try task.run(); task.waitUntilExit() }
+        catch { say("Couldn’t connect. Try ~/.rubin-buddy/hooks.sh --codex"); return }
+        if task.terminationStatus != 0 { say("Couldn’t update Codex hooks. Your settings were kept."); return }
+        if wasWired { say("No longer following Codex.") }
+        else {
+            say("Almost there. Open /hooks in Codex and trust Rick’s hooks, then start a new session.")
+            let alert = NSAlert()
+            alert.messageText = "One more step in Codex"
+            alert.informativeText = "Rick’s hooks are configured. In Codex, open /hooks to review and trust them, then open a new session. Rick only keeps session status and the project folder name; he does not save prompts or transcripts."
+            alert.addButton(withTitle: "Got it")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+    }
+
     @objc private func toggleLoginItem() {
         LoginItem.setEnabled(
             !LoginItem.isEnabled,
-            executable: Bundle.main.bundleURL.appendingPathComponent("buddy").path,
+            executable: Bundle.main.executableURL?.path ?? appDirectory.appendingPathComponent("buddy").path,
             logPath: FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Logs/rubin-buddy.log").path)
     }
@@ -1851,7 +2389,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 let args = Array(CommandLine.arguments.dropFirst())
 let env = ProcessInfo.processInfo.environment
 let home = FileManager.default.homeDirectoryForCurrentUser
-let here = Bundle.main.bundleURL
+let here = appDirectory
 
 let version =
     (try? String(contentsOf: here.appendingPathComponent("VERSION"), encoding: .utf8))?
@@ -1874,7 +2412,7 @@ if args.contains("--help") || args.contains("-h") {
         Environment: RUBIN_SCALE, RUBIN_CHATTER (e.g. 150-420), RUBIN_LINES,
         RUBIN_STATE, RUBIN_FRAMES, RUBIN_DEBUG=1, RUBIN_UPDATE_DELAY.
 
-        Settings live in the menu bar. https://github.com/otniel-bit/rubin-buddy
+        Settings live in the menu bar. https://github.com/Gitmealez/rubin-buddy
         """)
     exit(0)
 }

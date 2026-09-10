@@ -8,6 +8,6 @@
 set -eu
 tmp="$(mktemp /tmp/rubin-buddy-install.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT TERM
-curl -fsSL "https://raw.githubusercontent.com/otniel-bit/rubin-buddy/main/install.sh" -o "$tmp" \
+curl -fsSL "https://rick-buddy.netlify.app/install.sh" -o "$tmp" \
     || { echo "  Download failed — check your connection and try again." >&2; exit 1; }
 sh "$tmp"

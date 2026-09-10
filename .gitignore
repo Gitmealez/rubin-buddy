@@ -9,3 +9,9 @@ lines.txt.new
 press/*.html
 # written beside the script by hooks.sh --remove; state, not source
 .hooks-declined
+
+.netlify/
+dist/
+__pycache__/
+
+.hooks-*-declined

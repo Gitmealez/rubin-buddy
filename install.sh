@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install (or update) the Rick buddy.
 #
-#   curl -fsSL https://raw.githubusercontent.com/otniel-bit/rubin-buddy/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Gitmealez/rubin-buddy/main/install.sh | sh
 #
 # This same script is the updater — it's idempotent, preserves an edited
 # lines.txt, respects a disabled Start-at-Login, and restarts him when done.
@@ -21,7 +21,7 @@ set -eu
 
 main() {
 
-REPO="otniel-bit/rubin-buddy"
+REPO="Gitmealez/rubin-buddy"
 BRANCH="main"
 DEST="$HOME/.rubin-buddy"
 LABEL="co.desklify.rubinbuddy"
@@ -68,7 +68,7 @@ curl -fsSL "https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH" \
     | tar xz -C "$TMP" || die "Download failed. Is the repo public and the branch '$BRANCH' correct?"
 
 SRC="$TMP/$(ls "$TMP" | head -1)"
-for required in Buddy.swift lines.txt VERSION frames/manifest.json; do
+for required in Buddy.swift session-event.py lines.txt VERSION frames/manifest.json; do
     [ -e "$SRC/$required" ] || die "Download looks incomplete — no $required."
 done
 
@@ -96,7 +96,7 @@ if [ -d "$DEST/frames" ]; then mv "$DEST/frames" "$DEST/.frames.old"; fi
 mv "$DEST/.frames.new" "$DEST/frames"
 rm -rf "$DEST/.frames.old"
 
-for f in buddy state.sh update.sh hooks.sh uninstall.sh VERSION; do
+for f in buddy state.sh session-event.py update.sh hooks.sh uninstall.sh VERSION; do
     [ -e "$SRC/$f" ] || continue
     cp "$SRC/$f" "$DEST/.$f.new"
     case "$f" in *.sh|buddy) chmod +x "$DEST/.$f.new" ;; esac
@@ -195,7 +195,15 @@ else
     printf '\n  Installed %s, but he did not start. Try: %s/buddy\n' "$VERSION" "$DEST"
 fi
 
-# --- Claude Code ------------------------------------------------------------
+# --- Agent connections ------------------------------------------------------
+if grep -qs 'state.sh.*# rubin-buddy' "$HOME/.codex/hooks.json"; then
+    sh "$DEST/hooks.sh" --codex || say "Could not refresh Rick's Codex hooks. Use Follow Codex in his menu."
+fi
+# Upgrade Rick's already-authorized hooks to the session-aware adapter. Users
+# who declined remain disconnected; this never creates a new connection.
+if grep -qs 'state.sh.*# rubin-buddy' "$HOME/.claude/settings.json"; then
+    sh "$DEST/hooks.sh" || say "Could not refresh Rick's hooks. Use Follow Claude Code in his menu."
+fi
 # Offer the connection right here, once. This runs under `curl | sh`, where
 # stdin is the script itself — so the answer must come from /dev/tty. Headless
 # runs (RUBIN_AUTO from the in-app updater, or no controlling terminal) skip

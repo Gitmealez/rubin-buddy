@@ -198,7 +198,7 @@ write('4-install', `
     <li>Open Terminal.</li>
     <li>Paste this. Press return.</li>
   </ol>
-  <div class="term">curl -fsSL https://raw.githubusercontent.com/otniel-bit/rubin-buddy/main/install.sh | sh</div>
+  <div class="term">curl -fsSL https://raw.githubusercontent.com/Gitmealez/rubin-buddy/main/install.sh | sh</div>
   <div class="foot">
     <p>macOS. No Homebrew, no Node, nothing as administrator.<br>Built from source on your machine, so there's nothing unsigned to click past.</p>
     <p class="mono">rick-buddy.netlify.app</p>

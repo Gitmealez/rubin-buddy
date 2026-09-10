@@ -2,9 +2,10 @@
 # as the site root; nothing here touches the app itself.
 [build]
   publish = "site"
+  command = "node build-site.js"
   # Deploy only when the site itself changed — every app release otherwise
   # produced two identical deploys (the push and CI's bump commit).
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- site/ netlify.toml"
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- site/ netlify.toml frames/ build-site.js install.sh"
 
 [[headers]]
   for = "/*"
@@ -12,3 +13,9 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     X-Frame-Options = "SAMEORIGIN"
+
+[[headers]]
+  for = "/install.sh"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "no-cache"

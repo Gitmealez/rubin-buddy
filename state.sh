@@ -9,6 +9,11 @@ set -u
 dir="${RUBIN_STATE_DIR:-$HOME/.rubin-buddy}"
 mkdir -p "$dir" 2>/dev/null || exit 0
 word="${1:-idle}"
+if [ "$word" = "event" ]; then
+    self_dir="$(cd "$(dirname "$0")" && pwd)"
+    python3 "$self_dir/session-event.py" "$dir" "${2:-}" "${3:-claude}" 2>/dev/null || true
+    exit 0
+fi
 # "say" borrows his voice: `state.sh say Deploy is green.` puts the rest of the
 # arguments in his speech bubble, once. The buddy caps the length.
 if [ "$word" = "say" ] && [ "$#" -gt 1 ]; then

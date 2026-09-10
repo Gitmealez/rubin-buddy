@@ -9,12 +9,82 @@ thing, and the things he says are written for the character, not quoted from him
 
 ![Every frame of every animation](preview.png)
 
+## New: a little more useful, just as quiet
+
+Click Rick’s menu bar head to open his companion panel. Right-click the sprite
+for the full settings menu. Keep a thought, copy it as a PNG picture, browse
+saved thoughts, take a breath, or start a quiet 25-minute sit. Thoughts and the
+last spoken line survive restarts. There are no streaks or activity analytics.
+A sit silences unprompted chatter and leaves Rick seated while agent status
+continues to update. It survives restarts until its original deadline. Cancel
+at any time. Updates defer during a sit or guided breath.
+
+Text size is independent of character size. Rick respects macOS Reduce Motion.
+The optional menu bar status says Working, Needs you, Ready, or Check session;
+idle gestures never change that status. Multiple sessions are listed separately
+in the companion panel. “Clear reviewed completions” acknowledges only finished
+turns, never permission requests, and a new completion appears again.
+
+### Repair an older installation
+
+The GitHub repository moved from `otniel-bit` to `Gitmealez`. The old install
+and update URLs return 404. Older apps cannot discover the new location by
+themselves. Run the install command above once; it preserves preferences and
+edited lines, refreshes already-connected hooks, and repairs the updater.
+New installers and updaters use the stable website `/install.sh` address.
+
+### Follow Codex coding tasks
+
+Choose **Settings → Follow Codex**, or run:
+
+```sh
+~/.rubin-buddy/hooks.sh --codex
+```
+
+This merges Rick’s entries into `~/.codex/hooks.json`, preserves existing hooks,
+and creates a one-time backup. **In Codex, open `/hooks`, review and trust
+Rick’s definitions, then start a new session.** Configuration alone is not proof
+of an active connection. Rick never changes hook trust or bypasses review.
+Requires a Codex version supporting lifecycle hooks; this is not an integration
+with ordinary ChatGPT conversations in a browser.
+
+Undo with `~/.rubin-buddy/hooks.sh --codex --remove`. Uninstall removes both
+Claude and Codex connections. The adapter stores only a hashed session ID,
+provider, project directory’s final name, state, event name, and timestamp.
+It does not retain hook prompts, tool inputs, code, or transcript paths.
+
+Sources: [Codex hooks](https://learn.chatgpt.com/docs/hooks) ·
+[Claude Code hooks](https://code.claude.com/docs/en/hooks).
+
+### Standalone Mac app
+
+The source installer remains the public install path. A signing-ready packager
+is included: `sh build-mac.sh --unsigned` creates a local inspection bundle,
+not a public download. With a Developer ID Application certificate and an
+existing Keychain notarytool profile, set `RUBIN_SIGN_IDENTITY` and
+`RUBIN_NOTARY_PROFILE`, then run `sh build-mac.sh`. It signs, notarizes,
+staples, and assesses the bundle before producing `dist/Rick.zip`.
+Standalone bundles use their own preferences and manual website-based updates;
+source-installed Rick retains its existing automatic updates. Do not advertise
+an unsigned inspection build as an ordinary consumer download.
+
+### Checks before release
+
+```sh
+python3 tests/check_sessions.py
+python3 tests/check_models.py
+node build.js
+node build-site.js
+node --check site/preview.js
+swiftc -O Buddy.swift -o /tmp/rick-compile-check
+```
+
 ## Install
 
 One line, macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/otniel-bit/rubin-buddy/main/install.sh | sh
+curl -fsSL https://rick-buddy.netlify.app/install.sh | sh
 ```
 
 He appears bottom-right, adds a menu bar icon, and starts at login from then on.
@@ -43,7 +113,7 @@ The installer asks — say yes. Already installed? Click the menu bar head →
 ~/.rubin-buddy/hooks.sh
 ```
 
-That merges six hooks into `~/.claude/settings.json`, keeping whatever's already
+That merges eight hooks into `~/.claude/settings.json`, keeping whatever's already
 in there. Declining at install is remembered, so updates never nag. Open a new
 Claude Code session and he'll start reacting:
 
@@ -62,6 +132,11 @@ The bald silhouette with the shades. Everything lives there:
 
 | Item | |
 | --- | --- |
+| Open Companion | Quick panel for status, thoughts, breathing, and a quiet sit |
+| Sit with Me | 25 minutes of quiet company; stop any time |
+| Saved Thoughts | Keep lines locally, copy text, or copy a picture to share |
+| Text Size | 13, 15, 18, or 22 pt, independent of sprite size |
+| Follow Codex | Adds Codex hooks; requires review and trust in Codex |
 | Show / Hide Rick | Toggle without quitting |
 | **Bring Him Back** | Drops him bottom-right on the main screen, shades up. The "I've lost him" button. |
 | Size | Tiny · Small · Medium · Large |
@@ -185,11 +260,11 @@ from his documented ideas:
 **Report a Problem** in his menu opens a GitHub issue pre-filled with your
 version and macOS build. If he crashed or vanished, attach
 `~/Library/Logs/rubin-buddy.log` — it contains only his own errors, nothing
-personal. Or file directly: [issues](https://github.com/otniel-bit/rubin-buddy/issues),
+personal. Or file directly: [issues](https://github.com/Gitmealez/rubin-buddy/issues),
 or email [gonzalezot16@gmail.com](mailto:gonzalezot16@gmail.com) if GitHub isn't your thing.
 
 Got a line he should say? There's a
-[Suggest a line](https://github.com/otniel-bit/rubin-buddy/issues/new?template=suggest-a-line.md)
+[Suggest a line](https://github.com/Gitmealez/rubin-buddy/issues/new?template=suggest-a-line.md)
 template — short, original phrasing, in his voice. Lines that land get added to
 the deck and ship to everyone on the next update.
 
@@ -212,7 +287,7 @@ Only needed if you want to change the sprite or the code. Node is required here
 (it isn't for installing) because it generates the frames.
 
 ```bash
-git clone https://github.com/otniel-bit/rubin-buddy.git
+git clone https://github.com/Gitmealez/rubin-buddy.git
 cd rubin-buddy
 node build.js && swiftc -O Buddy.swift -o buddy
 ./buddy
@@ -241,10 +316,10 @@ hours and reinstall themselves. Two details make it safe:
 So `VERSION` is not something to edit by hand. If you do bump it manually, CI
 will bump it again on top — harmless, just a wasted release.
 
+Regenerate the website’s preview artwork and stable installer with `node build-site.js`.
+
 The landing page at [rick-buddy.netlify.app](https://rick-buddy.netlify.app) is
-`site/index.html`, deployed by Netlify on every push to `main`. It's one
-self-contained file: the sprite is inlined as base64 and there are no external
-requests.
+`site/index.html`, deployed by Netlify on every push to `main`. The interactive preview uses the app’s exact frames and timings. It has no analytics, cookies, external fonts, or account requirement.
 
 **Stop him before recompiling** (`pkill -x buddy`) — `swiftc -o buddy` writes in
 place, and overwriting a live executable gets it killed for an invalid code
@@ -269,9 +344,12 @@ RUBIN_DEBUG=1 RUBIN_UPDATE_DELAY=5 ./buddy    # log animation + update decisions
 | `Buddy.swift` | The app: window, state watching, speech bubble, menu bar, updater. |
 | `install.sh` | The one-liner. Also the updater — it's idempotent. |
 | `update.sh` · `hooks.sh` | Thin wrappers around the above. |
-| `state.sh` | What the Claude Code hooks call. Atomic one-word write. |
+| `state.sh` | Legacy script commands and session event entrypoint. |
+| `session-event.py` | Minimal local status records for Claude and Codex. |
+| `build-site.js` | Generates website preview assets and its stable installer. |
+| `build-mac.sh` | Standalone app packaging and optional signing/notarization. |
 | `lines.txt` | What he says. |
-| `VERSION` | Bump this to ship an update. |
+| `VERSION` | Automatically bumped by the release workflow. |
 
 ## How the pieces talk
 
@@ -460,8 +538,7 @@ Dragging him fully off every display is refused now too.
 
 ## Known rough edges
 
-- Every Claude Code session writes to the same state file, so with several
-  sessions running he reflects whichever one moved last.
+- Session hooks arrive asynchronously; their received order can differ from the agent’s event order. Per-session atomic files prevent one project from overwriting another. Inactive working sessions become “status unknown” after 30 minutes, not “finished.” Waiting and review states remain until the session changes or ends (up to seven days).
 - If the display he's parked on is unplugged he's hauled back to the main screen's
   bottom-right, which loses his position. Better than being stranded, and "Bring
   Him Back" is there either way.

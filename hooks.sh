@@ -10,7 +10,14 @@
 set -eu
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-SETTINGS="$HOME/.claude/settings.json"
+MARKERS="${RUBIN_HOOKS_MARKER_DIR:-$SELF_DIR}"
+PROVIDER="claude"
+if [ "${1:-}" = "--codex" ]; then PROVIDER="codex"; shift; fi
+if [ "$PROVIDER" = "codex" ]; then
+    SETTINGS="${RUBIN_HOOKS_SETTINGS:-$HOME/.codex/hooks.json}"
+else
+    SETTINGS="${RUBIN_HOOKS_SETTINGS:-$HOME/.claude/settings.json}"
+fi
 MODE="${1:-add}"
 
 command -v python3 >/dev/null 2>&1 || {
@@ -21,20 +28,28 @@ command -v python3 >/dev/null 2>&1 || {
 mkdir -p "$(dirname "$SETTINGS")"
 [ -f "$SETTINGS" ] || printf '{}\n' > "$SETTINGS"
 
-python3 - "$SETTINGS" "$SELF_DIR/state.sh" "$MODE" <<'PY'
-import json, sys, os
+python3 - "$SETTINGS" "$SELF_DIR/state.sh" "$MODE" "$PROVIDER" <<'PY'
+import json, sys, os, shlex
 
-settings_path, state_sh, mode = sys.argv[1], sys.argv[2], sys.argv[3]
+settings_path, state_sh, mode, provider = sys.argv[1:5]
 
 # What Rick does for each Claude Code event.
 MAPPING = {
     "SessionStart":     "idle",
     "UserPromptSubmit": "think",
     "PreToolUse":       "stroke",
+    "PostToolUse":      "stroke",
+    "PostToolUseFailure": "stroke",
     "Notification":     "glasses",
     "Stop":             "nod",
     "SessionEnd":       "idle",
 }
+
+if provider == "codex":
+    MAPPING.pop("Notification")
+    MAPPING.pop("PostToolUseFailure")
+    MAPPING["PermissionRequest"] = "glasses"
+    MAPPING["Interrupt"] = "idle"
 
 try:
     with open(settings_path) as f:
@@ -47,6 +62,8 @@ if not isinstance(settings, dict):
     sys.exit(f"{settings_path} is not a JSON object; leaving it alone.")
 
 hooks = settings.setdefault("hooks", {})
+if not isinstance(hooks, dict):
+    sys.exit("Unexpected hooks shape; leaving the file alone.")
 marker = "rubin-buddy"          # how we recognise our own entries later
 changed = 0
 
@@ -90,10 +107,13 @@ for event, state in MAPPING.items():
                 "type": "command",
                 # async so Rick is never the reason a hook is slow, and the
                 # script exits 0 unconditionally so he's never why one fails.
-                "command": f'"{state_sh}" {state}  # {marker}',
+                "command": f'{shlex.quote(state_sh)} event {event} {provider}  # {marker}',
                 "async": True,
+                "timeout": 2,
             }]
         })
+        if event == "Notification":
+            kept[-1]["matcher"] = "permission_prompt|idle_prompt"
     if kept != groups:
         changed += 1
     if kept:
@@ -124,9 +144,14 @@ PY
 
 if [ "$MODE" = "--remove" ]; then
     # Removing by hand is also a "no" — future installers must not re-ask.
-    touch "$SELF_DIR/.hooks-declined" 2>/dev/null || true
-    printf '\n  Rick no longer follows Claude Code.\n\n'
+    touch "$MARKERS/.hooks-$PROVIDER-declined" 2>/dev/null || true
+    [ "$PROVIDER" != "claude" ] || touch "$MARKERS/.hooks-declined" 2>/dev/null || true
+    printf '\n  Rick no longer follows %s.\n\n' "$PROVIDER"
 else
-    rm -f "$SELF_DIR/.hooks-declined" 2>/dev/null || true
-    printf '\n  Rick now follows Claude Code. Open a new session to see it.\n\n'
+    rm -f "$MARKERS/.hooks-$PROVIDER-declined" 2>/dev/null || true
+    [ "$PROVIDER" != "claude" ] || rm -f "$MARKERS/.hooks-declined" 2>/dev/null || true
+    printf '\n  Rick now follows %s. Open a new session to see it.\n\n' "$PROVIDER"
+    if [ "$PROVIDER" = "codex" ]; then
+        printf '  In Codex, review and trust Rick’s hooks via /hooks before they can run.\n'
+    fi
 fi

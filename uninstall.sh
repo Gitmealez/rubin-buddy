@@ -17,6 +17,10 @@ if grep -qs "rubin-buddy" "$HOME/.claude/settings.json" 2>/dev/null \
         || printf '  Could not unwire hooks automatically; see README.\n'
 fi
 
+if grep -qs 'state.sh.*# rubin-buddy' "$HOME/.codex/hooks.json" 2>/dev/null && [ -x "$DEST/hooks.sh" ]; then
+    sh "$DEST/hooks.sh" --codex --remove >/dev/null 2>&1 || true
+fi
+
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
 pkill -x buddy 2>/dev/null
 sleep 1
