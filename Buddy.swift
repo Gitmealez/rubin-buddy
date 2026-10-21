@@ -640,11 +640,13 @@ final class Bubble {
                 || (0x3040...0x30FF).contains($0.value)  // kana
                 || (0xAC00...0xD7AF).contains($0.value)  // hangul
         }
-        let seconds =
-            duration
-            ?? (dense
-                ? min(20.0, max(14.0, 3.0 + Double(text.count) * 0.2))
-                : min(9.0, max(3.0, 2.0 + Double(text.count) * 0.07)))
+        // Spelled out step by step: as one ?? / ?: expression this took Swift
+        // 6.4's type-checker past its time limit, and every install builds it.
+        let characters = Double(text.count)
+        let reading: Double = dense
+            ? min(20.0, max(14.0, 3.0 + characters * 0.2))
+            : min(9.0, max(3.0, 2.0 + characters * 0.07))
+        let seconds = duration ?? reading
         let work = DispatchWorkItem { [weak self] in self?.hide() }
         hideWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
