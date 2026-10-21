@@ -3,24 +3,29 @@ const fs = require('fs');
 const path = require('path');
 const { encodePNG } = require('./png');
 const {
-  OUT_W, OUT_H, ANIMATIONS, MENU_ICON, rasterize, rasterizeMask, withRim,
+  OUT_W, OUT_H, ANIMATIONS, MENU_ICON, rasterize, rasterizeMask, withRim, withShadow,
 } = require('./sprite');
 
 const OUT = path.join(__dirname, 'frames');
 fs.mkdirSync(OUT, { recursive: true });
 for (const f of fs.readdirSync(OUT)) fs.unlinkSync(path.join(OUT, f));
 
-// The rim is applied here rather than in the pose data, so every animation gets
-// it for free and none of the row strings have to account for it.
+// The rim and the contact shadow are applied here rather than in the pose
+// data, so every animation gets them for free and none of the row strings have
+// to account for them. Airborne frames get no shadow — he's left the ground.
 const rimmed = {};
 const manifest = {};
 for (const [name, anim] of Object.entries(ANIMATIONS)) {
-  rimmed[name] = anim.frames.map((frame) => withRim(frame.rows));
+  rimmed[name] = anim.frames.map((frame) => {
+    const rim = withRim(frame.rows, frame.aura ? 'O' : 'o');  // `aura`: the charge glow
+    return anim.airborne ? rim : withShadow(rim, frame.rows);
+  });
   manifest[name] = {
     next: anim.next ?? null,
     shades: anim.shades ?? 'down',
     transition: anim.transition ?? false,
     from: anim.from ?? anim.shades ?? 'down',
+    internal: anim.internal ?? false,
     frames: anim.frames.map((frame, i) => {
       const file = `${name}-${i}.png`;
       const { width, height, data } = rasterize(rimmed[name][i], 1);
@@ -29,9 +34,13 @@ for (const [name, anim] of Object.entries(ANIMATIONS)) {
     }),
   };
 }
+// `baseline`: image rows below the ground line he stands on — the contact
+// shadow lives there. The app puts this line on a window's edge when he perches.
+const feet = ANIMATIONS.idle.frames[0].rows.findLastIndex((row) => /[^.]/.test(row));
+const baseline = OUT_H - (feet + 1 + (OUT_H - ANIMATIONS.idle.frames[0].rows.length) / 2);
 fs.writeFileSync(
   path.join(OUT, 'manifest.json'),
-  JSON.stringify({ width: OUT_W, height: OUT_H, animations: manifest }, null, 2)
+  JSON.stringify({ width: OUT_W, height: OUT_H, baseline, animations: manifest }, null, 2)
 );
 
 // 2x so it's crisp at 16pt on a retina menu bar.

@@ -28,10 +28,21 @@ const PALETTE = {
   f: [0x56, 0x50, 0x4a],     // sunglasses frame
   l: [0x0e, 0x0c, 0x0b],     // lens
   r: [0xd9, 0x77, 0x57],     // Claude accent
+  p: [0x2b, 0x27, 0x24],     // headphone band
+  R: [0xa8, 0x55, 0x3c],     // Claude accent, shadow side — the headphone cups
+  q: [0xe9, 0xe4, 0xda],     // glint on the lenses
+  v: [0x75, 0x72, 0x6f],     // steam off the tea, pre-blended over his tee
+  u: [0xd3, 0xcd, 0xc0, 0xa8], // dust kicked up by a landing — never rimmed
   // Rim light, added around the silhouette by withRim(). Translucent on
   // purpose: against a dark desktop it lifts him off the background, against a
   // light one it all but disappears. An opaque rim reads as a sticker outline.
   o: [0xf6, 0xf3, 0xec, 0x9c],
+  // The same rim lit Claude-orange: the glow he gathers charging up a jump.
+  O: [0xe8, 0x7a, 0x52, 0xd8],
+  // Contact shadow, added under his feet by withShadow(). What makes him read
+  // as standing ON a window's edge rather than hovering in front of it.
+  z: [0x00, 0x00, 0x00, 0x48],
+  Z: [0x00, 0x00, 0x00, 0x1e],
 };
 
 const _ = (n) => '.'.repeat(n);
@@ -171,7 +182,10 @@ function shiftBand(rows, from, to, n) {
   return out;
 }
 
-const breathe = (rows) => shiftBand(rows, 0, H - 1, 1);
+// A breath: head and shoulders settle a pixel while the feet stay planted. The
+// whole body used to drop, which was fine floating in a corner and wrong once
+// he stands on a window's edge — every exhale sank his feet into the title bar.
+const breathe = (rows, headEnd = HEAD_BAND_END) => shiftBand(rows, 0, headEnd, 1);
 
 // Paint `over` on top of `under`, transparent pixels letting `under` show.
 function overlay(under, over) {
@@ -223,22 +237,24 @@ const handsOnBeard = buildRows(SHADES_ON, BODY_HANDS_UP, 'handsOnBeard');
 
 // Sitting cross-legged, hands on knees, beard pooling into the lap. The head
 // is the standing head, dropped so he reads as grounded rather than shrunk;
-// shades stay on — they always stay on.
+// shades stay on — they always stay on. His base is row 30, the same as his
+// feet standing, so sitting down on a window's edge doesn't leave him hovering.
+const SIT_HEAD_END = 21; // last row of the seated head, for his breathing
 const sitting = (() => {
   const wide = (interior) => _(1) + 'k' + interior + 'k' + _(1); // 20px interior
   const rows = [
-    ...Array(8).fill(_(W)),                 // 0-7
-    ...SHADES_ON.slice(1),                  // 8-20: skull through beard top
-    /* 21 */ body(c('n', 2) + c('w', 14) + c('n', 2)),
+    ...Array(9).fill(_(W)),                 // 0-8
+    ...SHADES_ON.slice(1),                  // 9-21: skull through beard top
     /* 22 */ body(c('n', 2) + c('w', 14) + c('n', 2)),
-    /* 23 */ body('n' + c('b', 2) + c('w', 12) + c('b', 2) + 'n'),
-    /* 24 */ wide(c('n', 2) + c('s', 2) + c('w', 12) + c('s', 2) + c('n', 2)),
-    /* 25 */ wide(c('b', 3) + c('s', 2) + c('w', 10) + c('s', 2) + c('b', 3)),
-    /* 26 */ wide(c('b', 6) + c('w', 3) + c('g', 2) + c('w', 3) + c('b', 6)),
-    /* 27 */ wide(c('b', 20)),
-    /* 28 */ wide(c('b', 6) + c('s', 3) + c('b', 2) + c('s', 3) + c('b', 6)),
-    /* 29 */ _(2) + c('k', 20) + _(2),
-    ...Array(2).fill(_(W)),                 // 30-31
+    /* 23 */ body(c('n', 2) + c('w', 14) + c('n', 2)),
+    /* 24 */ body('n' + c('b', 2) + c('w', 12) + c('b', 2) + 'n'),
+    /* 25 */ wide(c('n', 2) + c('s', 2) + c('w', 12) + c('s', 2) + c('n', 2)),
+    /* 26 */ wide(c('b', 3) + c('s', 2) + c('w', 10) + c('s', 2) + c('b', 3)),
+    /* 27 */ wide(c('b', 6) + c('w', 3) + c('g', 2) + c('w', 3) + c('b', 6)),
+    /* 28 */ wide(c('b', 20)),
+    /* 29 */ wide(c('b', 6) + c('s', 3) + c('b', 2) + c('s', 3) + c('b', 6)),
+    /* 30 */ _(2) + c('k', 20) + _(2),
+    /* 31 */ _(W),
   ];
   if (rows.length !== H) throw new Error(`sitting: ${rows.length} rows`);
   rows.forEach((row, y) => {
@@ -292,10 +308,13 @@ const stretchUp = (() => {
   }
   rows = stamp(rows, 2, 7, ['ss']);
   rows = stamp(rows, 20, 7, ['ss']);
+  // and the hands that hung at his hips go with the arms
+  rows = stamp(rows, 3, 21, ['bb', 'bb']);
+  rows = stamp(rows, 19, 21, ['bb', 'bb']);
   return rows;
 })();
 const stretchMid = (() => {
-  let rows = standing;
+  let rows = stamp(stamp(standing, 3, 21, ['bb', 'bb']), 19, 21, ['bb', 'bb']);
   for (const y of [11, 12, 13]) {
     rows = stamp(rows, 2, y, ['nn']);
     rows = stamp(rows, 20, y, ['nn']);
@@ -319,6 +338,137 @@ const teaSip = (() => {
   rows = stamp(rows, 16, 10, ['.rr', '.rr']);        // cup at the mouth
   return rows;
 })();
+// A fresh cup steams: two wisps over his sleeve that trade places.
+const teaSteaming = (phase) =>
+  stamp(teaHold, 18, 17, phase ? ['.v', 'v.'] : ['v.', '.v']);
+
+// Light catching the shades: a short diagonal streak slides across the lenses.
+const glintAt = (x) => stamp(standing, x, 7, ['.q', 'q.']);
+
+// --- hops ---------------------------------------------------------------------
+// He travels between windows by jumping. Knees bend (the torso drops onto his
+// feet), he leaves the ground arms-up with his feet tucked, and lands the same
+// crouch he left from.
+
+const crouchOf = (rows) => [_(W), _(W), ...rows.slice(0, 27), rows[29], rows[30], _(W)];
+const crouch = crouchOf(standing);
+const airborne = [...stretchUp.slice(0, 27), standing[29], standing[30], _(W), _(W), _(W)];
+
+// The long jump between windows gets a wind-up. He sinks lower than a crouch
+// — the torso right down onto his feet — while Claude-orange sparks climb the
+// air around him, trembles a pixel each way, and the light catches his shades.
+const deepCrouch = [_(W), _(W), _(W), ...standing.slice(0, 26), standing[29], standing[30], _(W)];
+// Streaks rising either side, clear of his outline.
+const SPARK_LEVELS = [
+  [[0, 27], [23, 25]],
+  [[0, 20], [23, 18]],
+  [[0, 13], [23, 11]],
+];
+const charged = (rows, levels) =>
+  levels.reduce((out, l) => SPARK_LEVELS[l].reduce((o, [x, y]) => stamp(o, x, y, ['r', 'r']), out), rows);
+const tremble = (rows, dx) => shiftBandX(rows, 0, H - 1, dx);
+const glintOn = (rows, x, dy) => stamp(rows, x, 7 + dy, ['.q', 'q.']);
+
+// In the air he tucks into his seated pose and turns over. Pixel art only
+// rotates cleanly by right angles, so it's the seated ball (a 24x24 square)
+// turned a quarter at a time, held centred so the spin doesn't wobble.
+const quarterTurn = (sq) => sq.map((_row, y) => sq.map((row) => row[y]).reverse().join(''));
+const spun = (seated, turns) => {
+  let sq = seated.slice(8, 32);
+  for (let i = 0; i < turns; i++) sq = quarterTurn(sq);
+  return [_(W), _(W), _(W), _(W), ...sq, _(W), _(W), _(W), _(W)];
+};
+
+// Landing: a hard crouch with the arms flung out for balance, dust thrown
+// either side; the arms come in, the dust drifts out; the shades glint. Cool.
+const impactOf = (base) => {
+  let rows = base;
+  for (let y = 17; y <= 25; y++) {     // the hanging arms go up and out
+    rows = stamp(rows, 3, y, ['bb']);
+    rows = stamp(rows, 19, y, ['bb']);
+  }
+  rows = stamp(rows, 0, 18, ['snn', 'snn']);
+  rows = stamp(rows, 21, 18, ['nns', 'nns']);
+  rows = stamp(rows, 1, 30, ['uuu']);
+  rows = stamp(rows, 20, 30, ['uuu']);
+  return stamp(stamp(rows, 2, 29, ['u']), 21, 29, ['u']);
+};
+const settlingOf = (base) =>
+  stamp(stamp(stamp(stamp(base, 0, 29, ['uu']), 22, 29, ['uu']), 0, 30, ['u']), 23, 30, ['u']);
+
+// The whole jump, dressed by `wear(rows, dy)` — bare, or with the headphones
+// on, so the music doesn't stop for a jump.
+function jumpOf(wear) {
+  const low = wear(deepCrouch, 3);
+  return {
+    charge: [
+      { rows: wear(crouch, 2), hold: 4 },
+      { rows: charged(low, [0]), hold: 4, aura: true },
+      { rows: tremble(charged(low, [0, 1]), 1), hold: 3 },
+      { rows: tremble(charged(low, [1, 2]), -1), hold: 3, aura: true },
+      { rows: charged(glintOn(low, 7, 3), [2]), hold: 2, aura: true },
+      { rows: glintOn(low, 13, 3), hold: 60, aura: true },
+    ],
+    flip: [
+      { rows: wear(airborne, 0), hold: 999 },
+      ...[0, 1, 2, 3].map((turns) => ({ rows: spun(wear(sitting, 8), turns), hold: 999 })),
+    ],
+    land: [
+      { rows: impactOf(wear(deepCrouch, 3)), hold: 5 },
+      { rows: settlingOf(wear(crouch, 2)), hold: 4 },
+      { rows: glintOn(wear(standing, 0), 9, 0), hold: 2 },
+      { rows: glintOn(wear(standing, 0), 13, 0), hold: 2 },
+    ],
+  };
+}
+const BARE = jumpOf((rows) => rows);
+const WIRED = jumpOf(withPhones);
+
+// Left behind where he took off: a ring of sparks and a puff of dust. Its own
+// little window, because by now he's already gone.
+const PUFF = [
+  [[[4, 29], ['.uuuu.', 'uuuuuu']], [[14, 29], ['.uuuu.', 'uuuuuu']], [[3, 26], ['r', 'r']], [[20, 26], ['r', 'r']], [[11, 27], ['rr']]],
+  [[[1, 28], ['.uu.', 'uuuu', 'uuu.']], [[19, 28], ['.uu.', 'uuuu', '.uuu']], [[1, 23], ['r', 'r']], [[22, 23], ['r', 'r']], [[11, 24], ['rr']]],
+  [[[0, 29], ['u.', 'uu']], [[22, 29], ['.u', 'uu']], [[0, 19], ['r']], [[23, 19], ['r']], [[11, 20], ['r']]],
+].map((marks) => marks.reduce((rows, [[x, y], patch]) => stamp(rows, x, y, patch), blank()));
+
+// --- music ------------------------------------------------------------------
+// Studio headphones: a band hugging the dome, a cup over each ear.
+
+// `dy` is how far down the head sits in the pose: 2 crouched, 8 seated.
+function withPhones(rows, dy = 0) {
+  let out = rows;
+  out = stamp(out, 9, dy, [c('p', 6)]);
+  out = stamp(out, 7, dy + 1, ['pp' + _(6) + 'pp']);
+  out = stamp(out, 6, dy + 2, ['p' + _(10) + 'p']);
+  out = stamp(out, 5, dy + 3, ['p' + _(12) + 'p']);
+  out = stamp(out, 4, dy + 4, ['p' + _(14) + 'p', 'p' + _(14) + 'p']);
+  // Claude-orange cups — the music is the one loud thing he wears.
+  out = stamp(out, 3, dy + 6, ['.rr', 'Rrr', 'Rrr', '.rr']);   // left cup
+  out = stamp(out, 18, dy + 6, ['rr.', 'rrR', 'rrR', 'rr.']);  // right cup
+  return out;
+}
+
+// Both hands up at his ears, settling the headphones on (or lifting them off).
+const handsAtEars = (() => {
+  let rows = standing;
+  for (let y = 14; y <= 22; y++) {
+    rows = stamp(rows, 3, y, ['bb']);
+    rows = stamp(rows, 19, y, ['bb']);
+  }
+  for (const y of [10, 11, 12, 13]) {
+    rows = stamp(rows, 2, y, ['nn']);
+    rows = stamp(rows, 20, y, ['nn']);
+  }
+  rows = stamp(rows, 2, 9, ['ss']);
+  rows = stamp(rows, 20, 9, ['ss']);
+  return rows;
+})();
+
+const NOTE = ['.rr', '.r.', 'rr.'];
+const phonesOn = withPhones(standing);
+// The head bobs down on the beat and tips to one side; the body keeps time.
+const bob = (rows, dx) => shiftBandX(shiftBand(rows, 0, HEAD_BAND_END, 1), 0, HEAD_BAND_END, dx);
 
 // --- animations -------------------------------------------------------------
 // `next`      animation to settle into once a one-shot finishes; null loops.
@@ -409,7 +559,7 @@ const ANIMATIONS = {
     next: 'meditate',
     shades: 'down',
     frames: [
-      { rows: breathe(standing), hold: 5 },
+      { rows: crouch, hold: 5 },
       { rows: sitting, hold: 5 },
     ],
   },
@@ -421,7 +571,7 @@ const ANIMATIONS = {
     shades: 'down',
     frames: [
       { rows: sitting, hold: 28 },
-      { rows: breathe(sitting), hold: 28 },
+      { rows: breathe(sitting, SIT_HEAD_END), hold: 28 },
     ],
   },
 
@@ -431,7 +581,7 @@ const ANIMATIONS = {
     shades: 'down',
     frames: [
       { rows: sitting, hold: 4 },
-      { rows: breathe(standing), hold: 4 },
+      { rows: crouch, hold: 4 },
     ],
   },
 
@@ -474,7 +624,8 @@ const ANIMATIONS = {
     next: 'idle',
     shades: 'down',
     frames: [
-      { rows: teaHold, hold: 12 },
+      { rows: teaSteaming(0), hold: 7 },
+      { rows: teaSteaming(1), hold: 7 },
       { rows: teaRaise, hold: 8 },
       { rows: teaSip, hold: 36 },
       { rows: teaRaise, hold: 8 },
@@ -493,6 +644,99 @@ const ANIMATIONS = {
       { rows: wearing(3, 'open'), hold: 20 },
     ],
   },
+
+  // Light catches the shades and slides across. Cool without trying.
+  glint: {
+    next: 'idle',
+    shades: 'down',
+    frames: [
+      { rows: standing, hold: 8 },
+      { rows: glintAt(7), hold: 2 },
+      { rows: glintAt(9), hold: 2 },
+      { rows: glintAt(13), hold: 2 },
+      { rows: glintAt(15), hold: 2 },
+      { rows: standing, hold: 10 },
+    ],
+  },
+
+  // Music. Headphones on, head down on the beat — about 100 BPM, a note
+  // rising off whichever side he's tipping away from.
+  groove: {
+    next: null,
+    shades: 'down',
+    frames: [
+      { rows: stamp(phonesOn, 21, 3, NOTE), hold: 11 },
+      { rows: stamp(bob(phonesOn, -1), 21, 1, NOTE), hold: 7 },
+      { rows: stamp(phonesOn, 0, 3, NOTE), hold: 11 },
+      { rows: stamp(bob(phonesOn, 1), 0, 1, NOTE), hold: 7 },
+    ],
+  },
+
+  // `internal` animations are steps the app plays on its way somewhere else;
+  // they stay out of the Pose menu.
+
+  // Both hands settle the headphones on. The groove follows.
+  phones: {
+    next: 'groove',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: handsAtEars, hold: 5 },
+      { rows: withPhones(handsAtEars), hold: 6 },
+    ],
+  },
+
+  // And lifts them off when the music stops.
+  unphones: {
+    next: 'idle',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: withPhones(handsAtEars), hold: 6 },
+      { rows: handsAtEars, hold: 5 },
+    ],
+  },
+
+  // The jump to another window: charge, spin, land. The app moves his window
+  // along the arc and picks the flip frame itself — launch first, then the
+  // quarter turns — so the spin always lands upright; hence the long holds.
+  charge: { next: null, internal: true, shades: 'down', frames: BARE.charge },
+  flip: { next: null, internal: true, airborne: true, shades: 'down', frames: BARE.flip },
+  // The same with the headphones on — the groove resumes on landing.
+  'charge-phones': { next: null, internal: true, shades: 'down', frames: WIRED.charge },
+  'flip-phones': { next: null, internal: true, airborne: true, shades: 'down', frames: WIRED.flip },
+  'land-phones': { next: 'idle', internal: true, shades: 'down', frames: WIRED.land },
+  puff: {
+    next: null,
+    internal: true,
+    airborne: true,
+    shades: 'down',
+    frames: PUFF.map((rows) => ({ rows, hold: 3 })),
+  },
+
+  // A short hop — nudged along the same edge, or a window a step away — skips
+  // the ceremony: crouch, up, down. The app moves his window while `fly` plays.
+  leap: {
+    next: 'fly',
+    internal: true,
+    shades: 'down',
+    frames: [{ rows: crouch, hold: 4 }],
+  },
+  fly: {
+    next: null,
+    internal: true,
+    airborne: true,
+    shades: 'down',
+    frames: [{ rows: airborne, hold: 30 }],
+  },
+  // The short hop's landing: just the crouch.
+  touchdown: {
+    next: 'idle',
+    internal: true,
+    shades: 'down',
+    frames: [{ rows: crouch, hold: 5 }],
+  },
+  land: { next: 'idle', internal: true, shades: 'down', frames: BARE.land },
 };
 
 // --- menu bar icon ----------------------------------------------------------
@@ -552,9 +796,12 @@ const OUT_H = H + RIM_PAD * 2;
 /// taper and around the dome get covered too — 4-connected leaves gaps exactly
 /// on the sloped edges that most need separating from the background.
 ///
-/// The pad is what makes this safe: the sprite grid reaches row 31 on the
-/// breathing frames, so without it the rim under his feet would clip.
-function withRim(rows) {
+/// The pad is what makes this safe: without it the rim (and the contact shadow
+/// that later replaces it) under his feet would clip at the bottom row.
+// Dust is air, not outline: a rim around it would turn a puff into a sticker.
+const UNRIMMED = new Set(['u']);
+
+function withRim(rows, rim = 'o') {
   const pad = '.'.repeat(RIM_PAD);
   const blankRow = '.'.repeat(OUT_W);
   const padded = [
@@ -572,13 +819,42 @@ function withRim(rows) {
           for (let dx = -1; dx <= 1; dx++) {
             if (dx === 0 && dy === 0) continue;
             const n = padded[y + dy]?.[x + dx];
-            if (n && n !== '.' && n !== 'o') return 'o';
+            if (n && n !== '.' && n !== 'o' && n !== 'O' && !UNRIMMED.has(n)) return rim;
           }
         }
         return ch;
       })
       .join('')
   );
+}
+
+// --- contact shadow ---------------------------------------------------------
+
+/// A soft two-row shadow under whatever he's standing or sitting on: a darker
+/// band one pixel wider than his base, a fainter one tucked under it. Laid over
+/// the rim (it replaces the rim under his feet) and found from the raw rows, so
+/// every grounded pose gets one at its own width. Airborne frames get none.
+function withShadow(rimmed, raw) {
+  let base = -1;
+  for (let y = raw.length - 1; y >= 0 && base < 0; y--) {
+    if (/[^.]/.test(raw[y])) base = y;
+  }
+  if (base < 0) return rimmed;
+  const from = raw[base].search(/[^.]/);
+  const to = raw[base].length - 1 - raw[base].split('').reverse().join('').search(/[^.]/);
+  const out = rimmed.slice();
+  const paint = (y, x0, x1, ch) => {
+    if (y >= out.length) return;
+    const row = out[y].split('');
+    for (let x = Math.max(0, x0); x <= Math.min(row.length - 1, x1); x++) {
+      if (row[x] === '.' || row[x] === 'o') row[x] = ch;
+    }
+    out[y] = row.join('');
+  };
+  // +RIM_PAD converts raw coordinates to padded ones.
+  paint(base + 1 + RIM_PAD, from - 1 + RIM_PAD, to + 1 + RIM_PAD, 'z');
+  paint(base + 2 + RIM_PAD, from + 1 + RIM_PAD, to - 1 + RIM_PAD, 'Z');
+  return out;
 }
 
 // --- rasterizing ------------------------------------------------------------
@@ -609,4 +885,5 @@ function rasterize(rows, scale) {
 
 module.exports = {
   W, H, OUT_W, OUT_H, PALETTE, ANIMATIONS, MENU_ICON, rasterize, rasterizeMask, withRim,
+  withShadow,
 };

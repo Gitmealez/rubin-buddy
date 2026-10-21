@@ -1,12 +1,14 @@
 {
   "width": 26,
   "height": 34,
+  "baseline": 2,
   "animations": {
     "idle": {
       "next": null,
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "idle-0.png",
@@ -23,6 +25,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "think-0.png",
@@ -47,6 +50,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "stroke-0.png",
@@ -71,6 +75,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "nod-0.png",
@@ -95,6 +100,7 @@
       "shades": "up",
       "transition": true,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "glasses-0.png",
@@ -119,6 +125,7 @@
       "shades": "down",
       "transition": true,
       "from": "up",
+      "internal": false,
       "frames": [
         {
           "file": "unglasses-0.png",
@@ -143,6 +150,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "sitdown-0.png",
@@ -159,6 +167,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "meditate-0.png",
@@ -175,6 +184,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "standup-0.png",
@@ -191,6 +201,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "glance-0.png",
@@ -215,6 +226,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "adjust-0.png",
@@ -235,6 +247,7 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "stretch-0.png",
@@ -255,25 +268,30 @@
       "shades": "down",
       "transition": false,
       "from": "down",
+      "internal": false,
       "frames": [
         {
           "file": "tea-0.png",
-          "hold": 12
+          "hold": 7
         },
         {
           "file": "tea-1.png",
-          "hold": 8
+          "hold": 7
         },
         {
           "file": "tea-2.png",
-          "hold": 36
-        },
-        {
-          "file": "tea-3.png",
           "hold": 8
         },
         {
+          "file": "tea-3.png",
+          "hold": 36
+        },
+        {
           "file": "tea-4.png",
+          "hold": 8
+        },
+        {
+          "file": "tea-5.png",
           "hold": 8
         }
       ]
@@ -283,6 +301,7 @@
       "shades": "up",
       "transition": false,
       "from": "up",
+      "internal": false,
       "frames": [
         {
           "file": "look-0.png",
@@ -299,6 +318,332 @@
         {
           "file": "look-3.png",
           "hold": 20
+        }
+      ]
+    },
+    "glint": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": false,
+      "frames": [
+        {
+          "file": "glint-0.png",
+          "hold": 8
+        },
+        {
+          "file": "glint-1.png",
+          "hold": 2
+        },
+        {
+          "file": "glint-2.png",
+          "hold": 2
+        },
+        {
+          "file": "glint-3.png",
+          "hold": 2
+        },
+        {
+          "file": "glint-4.png",
+          "hold": 2
+        },
+        {
+          "file": "glint-5.png",
+          "hold": 10
+        }
+      ]
+    },
+    "groove": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": false,
+      "frames": [
+        {
+          "file": "groove-0.png",
+          "hold": 11
+        },
+        {
+          "file": "groove-1.png",
+          "hold": 7
+        },
+        {
+          "file": "groove-2.png",
+          "hold": 11
+        },
+        {
+          "file": "groove-3.png",
+          "hold": 7
+        }
+      ]
+    },
+    "phones": {
+      "next": "groove",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "phones-0.png",
+          "hold": 5
+        },
+        {
+          "file": "phones-1.png",
+          "hold": 6
+        }
+      ]
+    },
+    "unphones": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "unphones-0.png",
+          "hold": 6
+        },
+        {
+          "file": "unphones-1.png",
+          "hold": 5
+        }
+      ]
+    },
+    "charge": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "charge-0.png",
+          "hold": 4
+        },
+        {
+          "file": "charge-1.png",
+          "hold": 4
+        },
+        {
+          "file": "charge-2.png",
+          "hold": 3
+        },
+        {
+          "file": "charge-3.png",
+          "hold": 3
+        },
+        {
+          "file": "charge-4.png",
+          "hold": 2
+        },
+        {
+          "file": "charge-5.png",
+          "hold": 60
+        }
+      ]
+    },
+    "flip": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "flip-0.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-1.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-2.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-3.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-4.png",
+          "hold": 999
+        }
+      ]
+    },
+    "charge-phones": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "charge-phones-0.png",
+          "hold": 4
+        },
+        {
+          "file": "charge-phones-1.png",
+          "hold": 4
+        },
+        {
+          "file": "charge-phones-2.png",
+          "hold": 3
+        },
+        {
+          "file": "charge-phones-3.png",
+          "hold": 3
+        },
+        {
+          "file": "charge-phones-4.png",
+          "hold": 2
+        },
+        {
+          "file": "charge-phones-5.png",
+          "hold": 60
+        }
+      ]
+    },
+    "flip-phones": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "flip-phones-0.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-phones-1.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-phones-2.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-phones-3.png",
+          "hold": 999
+        },
+        {
+          "file": "flip-phones-4.png",
+          "hold": 999
+        }
+      ]
+    },
+    "land-phones": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "land-phones-0.png",
+          "hold": 5
+        },
+        {
+          "file": "land-phones-1.png",
+          "hold": 4
+        },
+        {
+          "file": "land-phones-2.png",
+          "hold": 2
+        },
+        {
+          "file": "land-phones-3.png",
+          "hold": 2
+        }
+      ]
+    },
+    "puff": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "puff-0.png",
+          "hold": 3
+        },
+        {
+          "file": "puff-1.png",
+          "hold": 3
+        },
+        {
+          "file": "puff-2.png",
+          "hold": 3
+        }
+      ]
+    },
+    "leap": {
+      "next": "fly",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "leap-0.png",
+          "hold": 4
+        }
+      ]
+    },
+    "fly": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "fly-0.png",
+          "hold": 30
+        }
+      ]
+    },
+    "touchdown": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "touchdown-0.png",
+          "hold": 5
+        }
+      ]
+    },
+    "land": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "land-0.png",
+          "hold": 5
+        },
+        {
+          "file": "land-1.png",
+          "hold": 4
+        },
+        {
+          "file": "land-2.png",
+          "hold": 2
+        },
+        {
+          "file": "land-3.png",
+          "hold": 2
         }
       ]
     }

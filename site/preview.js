@@ -13,6 +13,8 @@
   function later(fn, milliseconds) { timers.push(setTimeout(fn, milliseconds)); }
   function reset() {
     timers.forEach(clearTimeout); timers = []; busy = false;
+    document.getElementById('music').textContent = 'Play a record';
+    document.getElementById('music').setAttribute('aria-pressed', 'false');
     document.getElementById('breath').textContent = 'Take a breath';
     document.getElementById('breath').setAttribute('aria-pressed', 'false');
     status.textContent = 'Just keeping you company.';
@@ -40,6 +42,17 @@
       }
     }
     later(() => { reset(); pose('idle'); speak('A little space. That’s all.'); }, at);
+  });
+  // The app's own headphones: on with the music, a nod on every beat.
+  document.getElementById('music').addEventListener('click', () => {
+    const stopping = document.getElementById('music').getAttribute('aria-pressed') === 'true';
+    reset();
+    if (stopping) { pose('unphones'); speak('Listen for what isn’t there.'); return; }
+    busy = true; pose('phones');
+    const button = document.getElementById('music');
+    button.textContent = 'Stop the record'; button.setAttribute('aria-pressed', 'true');
+    status.textContent = 'Music playing · any app';
+    speak('Listen without deciding.');
   });
   document.getElementById('work').addEventListener('click', () => {
     reset(); busy = true;
@@ -77,7 +90,7 @@
   requestAnimationFrame(animate);
   setInterval(() => {
     if (busy || document.hidden || reduced.matches || animation !== 'idle') return;
-    pose(['tea', 'adjust', 'glance'][Math.floor(Math.random() * 3)]);
+    pose(['tea', 'adjust', 'glance', 'glint'][Math.floor(Math.random() * 4)]);
     later(() => { if (!busy) pose('idle'); }, 4500);
   }, 15000);
   document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
