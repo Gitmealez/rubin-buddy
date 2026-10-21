@@ -1,7 +1,8 @@
 {
   "width": 26,
-  "height": 34,
+  "height": 38,
   "baseline": 2,
+  "headroom": 5,
   "animations": {
     "idle": {
       "next": null,
@@ -12,11 +13,23 @@
       "frames": [
         {
           "file": "idle-0.png",
-          "hold": 16
+          "hold": 16,
+          "outfits": {
+            "witch": "idle-0~witch.png",
+            "santa": "idle-0~santa.png",
+            "beanie": "idle-0~beanie.png",
+            "party": "idle-0~party.png"
+          }
         },
         {
           "file": "idle-1.png",
-          "hold": 16
+          "hold": 16,
+          "outfits": {
+            "witch": "idle-1~witch.png",
+            "santa": "idle-1~santa.png",
+            "beanie": "idle-1~beanie.png",
+            "party": "idle-1~party.png"
+          }
         }
       ]
     },
@@ -29,19 +42,43 @@
       "frames": [
         {
           "file": "think-0.png",
-          "hold": 10
+          "hold": 10,
+          "outfits": {
+            "witch": "think-0~witch.png",
+            "santa": "think-0~santa.png",
+            "beanie": "think-0~beanie.png",
+            "party": "think-0~party.png"
+          }
         },
         {
           "file": "think-1.png",
-          "hold": 10
+          "hold": 10,
+          "outfits": {
+            "witch": "think-1~witch.png",
+            "santa": "think-1~santa.png",
+            "beanie": "think-1~beanie.png",
+            "party": "think-1~party.png"
+          }
         },
         {
           "file": "think-2.png",
-          "hold": 10
+          "hold": 10,
+          "outfits": {
+            "witch": "think-2~witch.png",
+            "santa": "think-2~santa.png",
+            "beanie": "think-2~beanie.png",
+            "party": "think-2~party.png"
+          }
         },
         {
           "file": "think-3.png",
-          "hold": 10
+          "hold": 10,
+          "outfits": {
+            "witch": "think-3~witch.png",
+            "santa": "think-3~santa.png",
+            "beanie": "think-3~beanie.png",
+            "party": "think-3~party.png"
+          }
         }
       ]
     },
@@ -54,19 +91,43 @@
       "frames": [
         {
           "file": "stroke-0.png",
-          "hold": 9
+          "hold": 9,
+          "outfits": {
+            "witch": "stroke-0~witch.png",
+            "santa": "stroke-0~santa.png",
+            "beanie": "stroke-0~beanie.png",
+            "party": "stroke-0~party.png"
+          }
         },
         {
           "file": "stroke-1.png",
-          "hold": 9
+          "hold": 9,
+          "outfits": {
+            "witch": "stroke-1~witch.png",
+            "santa": "stroke-1~santa.png",
+            "beanie": "stroke-1~beanie.png",
+            "party": "stroke-1~party.png"
+          }
         },
         {
           "file": "stroke-2.png",
-          "hold": 9
+          "hold": 9,
+          "outfits": {
+            "witch": "stroke-2~witch.png",
+            "santa": "stroke-2~santa.png",
+            "beanie": "stroke-2~beanie.png",
+            "party": "stroke-2~party.png"
+          }
         },
         {
           "file": "stroke-3.png",
-          "hold": 9
+          "hold": 9,
+          "outfits": {
+            "witch": "stroke-3~witch.png",
+            "santa": "stroke-3~santa.png",
+            "beanie": "stroke-3~beanie.png",
+            "party": "stroke-3~party.png"
+          }
         }
       ]
     },
@@ -79,19 +140,43 @@
       "frames": [
         {
           "file": "nod-0.png",
-          "hold": 8
+          "hold": 8,
+          "outfits": {
+            "witch": "nod-0~witch.png",
+            "santa": "nod-0~santa.png",
+            "beanie": "nod-0~beanie.png",
+            "party": "nod-0~party.png"
+          }
         },
         {
           "file": "nod-1.png",
-          "hold": 8
+          "hold": 8,
+          "outfits": {
+            "witch": "nod-1~witch.png",
+            "santa": "nod-1~santa.png",
+            "beanie": "nod-1~beanie.png",
+            "party": "nod-1~party.png"
+          }
         },
         {
           "file": "nod-2.png",
-          "hold": 16
+          "hold": 16,
+          "outfits": {
+            "witch": "nod-2~witch.png",
+            "santa": "nod-2~santa.png",
+            "beanie": "nod-2~beanie.png",
+            "party": "nod-2~party.png"
+          }
         },
         {
           "file": "nod-3.png",
-          "hold": 8
+          "hold": 8,
+          "outfits": {
+            "witch": "nod-3~witch.png",
+            "santa": "nod-3~santa.png",
+            "beanie": "nod-3~beanie.png",
+            "party": "nod-3~party.png"
+          }
         }
       ]
     },
@@ -104,19 +189,43 @@
       "frames": [
         {
           "file": "glasses-0.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "glasses-0~witch.png",
+            "santa": "glasses-0~santa.png",
+            "beanie": "glasses-0~beanie.png",
+            "party": "glasses-0~party.png"
+          }
         },
         {
           "file": "glasses-1.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "glasses-1~witch.png",
+            "santa": "glasses-1~santa.png",
+            "beanie": "glasses-1~beanie.png",
+            "party": "glasses-1~party.png"
+          }
         },
         {
           "file": "glasses-2.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "glasses-2~witch.png",
+            "santa": "glasses-2~santa.png",
+            "beanie": "glasses-2~beanie.png",
+            "party": "glasses-2~party.png"
+          }
         },
         {
           "file": "glasses-3.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "glasses-3~witch.png",
+            "santa": "glasses-3~santa.png",
+            "beanie": "glasses-3~beanie.png",
+            "party": "glasses-3~party.png"
+          }
         }
       ]
     },
@@ -129,19 +238,43 @@
       "frames": [
         {
           "file": "unglasses-0.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "unglasses-0~witch.png",
+            "santa": "unglasses-0~santa.png",
+            "beanie": "unglasses-0~beanie.png",
+            "party": "unglasses-0~party.png"
+          }
         },
         {
           "file": "unglasses-1.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "unglasses-1~witch.png",
+            "santa": "unglasses-1~santa.png",
+            "beanie": "unglasses-1~beanie.png",
+            "party": "unglasses-1~party.png"
+          }
         },
         {
           "file": "unglasses-2.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "unglasses-2~witch.png",
+            "santa": "unglasses-2~santa.png",
+            "beanie": "unglasses-2~beanie.png",
+            "party": "unglasses-2~party.png"
+          }
         },
         {
           "file": "unglasses-3.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "unglasses-3~witch.png",
+            "santa": "unglasses-3~santa.png",
+            "beanie": "unglasses-3~beanie.png",
+            "party": "unglasses-3~party.png"
+          }
         }
       ]
     },
@@ -154,11 +287,23 @@
       "frames": [
         {
           "file": "sitdown-0.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "sitdown-0~witch.png",
+            "santa": "sitdown-0~santa.png",
+            "beanie": "sitdown-0~beanie.png",
+            "party": "sitdown-0~party.png"
+          }
         },
         {
           "file": "sitdown-1.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "sitdown-1~witch.png",
+            "santa": "sitdown-1~santa.png",
+            "beanie": "sitdown-1~beanie.png",
+            "party": "sitdown-1~party.png"
+          }
         }
       ]
     },
@@ -171,11 +316,23 @@
       "frames": [
         {
           "file": "meditate-0.png",
-          "hold": 28
+          "hold": 28,
+          "outfits": {
+            "witch": "meditate-0~witch.png",
+            "santa": "meditate-0~santa.png",
+            "beanie": "meditate-0~beanie.png",
+            "party": "meditate-0~party.png"
+          }
         },
         {
           "file": "meditate-1.png",
-          "hold": 28
+          "hold": 28,
+          "outfits": {
+            "witch": "meditate-1~witch.png",
+            "santa": "meditate-1~santa.png",
+            "beanie": "meditate-1~beanie.png",
+            "party": "meditate-1~party.png"
+          }
         }
       ]
     },
@@ -188,11 +345,23 @@
       "frames": [
         {
           "file": "standup-0.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "standup-0~witch.png",
+            "santa": "standup-0~santa.png",
+            "beanie": "standup-0~beanie.png",
+            "party": "standup-0~party.png"
+          }
         },
         {
           "file": "standup-1.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "standup-1~witch.png",
+            "santa": "standup-1~santa.png",
+            "beanie": "standup-1~beanie.png",
+            "party": "standup-1~party.png"
+          }
         }
       ]
     },
@@ -205,19 +374,43 @@
       "frames": [
         {
           "file": "glance-0.png",
-          "hold": 12
+          "hold": 12,
+          "outfits": {
+            "witch": "glance-0~witch.png",
+            "santa": "glance-0~santa.png",
+            "beanie": "glance-0~beanie.png",
+            "party": "glance-0~party.png"
+          }
         },
         {
           "file": "glance-1.png",
-          "hold": 24
+          "hold": 24,
+          "outfits": {
+            "witch": "glance-1~witch.png",
+            "santa": "glance-1~santa.png",
+            "beanie": "glance-1~beanie.png",
+            "party": "glance-1~party.png"
+          }
         },
         {
           "file": "glance-2.png",
-          "hold": 10
+          "hold": 10,
+          "outfits": {
+            "witch": "glance-2~witch.png",
+            "santa": "glance-2~santa.png",
+            "beanie": "glance-2~beanie.png",
+            "party": "glance-2~party.png"
+          }
         },
         {
           "file": "glance-3.png",
-          "hold": 24
+          "hold": 24,
+          "outfits": {
+            "witch": "glance-3~witch.png",
+            "santa": "glance-3~santa.png",
+            "beanie": "glance-3~beanie.png",
+            "party": "glance-3~party.png"
+          }
         }
       ]
     },
@@ -230,15 +423,33 @@
       "frames": [
         {
           "file": "adjust-0.png",
-          "hold": 6
+          "hold": 6,
+          "outfits": {
+            "witch": "adjust-0~witch.png",
+            "santa": "adjust-0~santa.png",
+            "beanie": "adjust-0~beanie.png",
+            "party": "adjust-0~party.png"
+          }
         },
         {
           "file": "adjust-1.png",
-          "hold": 14
+          "hold": 14,
+          "outfits": {
+            "witch": "adjust-1~witch.png",
+            "santa": "adjust-1~santa.png",
+            "beanie": "adjust-1~beanie.png",
+            "party": "adjust-1~party.png"
+          }
         },
         {
           "file": "adjust-2.png",
-          "hold": 6
+          "hold": 6,
+          "outfits": {
+            "witch": "adjust-2~witch.png",
+            "santa": "adjust-2~santa.png",
+            "beanie": "adjust-2~beanie.png",
+            "party": "adjust-2~party.png"
+          }
         }
       ]
     },
@@ -251,15 +462,33 @@
       "frames": [
         {
           "file": "stretch-0.png",
-          "hold": 6
+          "hold": 6,
+          "outfits": {
+            "witch": "stretch-0~witch.png",
+            "santa": "stretch-0~santa.png",
+            "beanie": "stretch-0~beanie.png",
+            "party": "stretch-0~party.png"
+          }
         },
         {
           "file": "stretch-1.png",
-          "hold": 42
+          "hold": 42,
+          "outfits": {
+            "witch": "stretch-1~witch.png",
+            "santa": "stretch-1~santa.png",
+            "beanie": "stretch-1~beanie.png",
+            "party": "stretch-1~party.png"
+          }
         },
         {
           "file": "stretch-2.png",
-          "hold": 6
+          "hold": 6,
+          "outfits": {
+            "witch": "stretch-2~witch.png",
+            "santa": "stretch-2~santa.png",
+            "beanie": "stretch-2~beanie.png",
+            "party": "stretch-2~party.png"
+          }
         }
       ]
     },
@@ -272,27 +501,63 @@
       "frames": [
         {
           "file": "tea-0.png",
-          "hold": 7
+          "hold": 7,
+          "outfits": {
+            "witch": "tea-0~witch.png",
+            "santa": "tea-0~santa.png",
+            "beanie": "tea-0~beanie.png",
+            "party": "tea-0~party.png"
+          }
         },
         {
           "file": "tea-1.png",
-          "hold": 7
+          "hold": 7,
+          "outfits": {
+            "witch": "tea-1~witch.png",
+            "santa": "tea-1~santa.png",
+            "beanie": "tea-1~beanie.png",
+            "party": "tea-1~party.png"
+          }
         },
         {
           "file": "tea-2.png",
-          "hold": 8
+          "hold": 8,
+          "outfits": {
+            "witch": "tea-2~witch.png",
+            "santa": "tea-2~santa.png",
+            "beanie": "tea-2~beanie.png",
+            "party": "tea-2~party.png"
+          }
         },
         {
           "file": "tea-3.png",
-          "hold": 36
+          "hold": 36,
+          "outfits": {
+            "witch": "tea-3~witch.png",
+            "santa": "tea-3~santa.png",
+            "beanie": "tea-3~beanie.png",
+            "party": "tea-3~party.png"
+          }
         },
         {
           "file": "tea-4.png",
-          "hold": 8
+          "hold": 8,
+          "outfits": {
+            "witch": "tea-4~witch.png",
+            "santa": "tea-4~santa.png",
+            "beanie": "tea-4~beanie.png",
+            "party": "tea-4~party.png"
+          }
         },
         {
           "file": "tea-5.png",
-          "hold": 8
+          "hold": 8,
+          "outfits": {
+            "witch": "tea-5~witch.png",
+            "santa": "tea-5~santa.png",
+            "beanie": "tea-5~beanie.png",
+            "party": "tea-5~party.png"
+          }
         }
       ]
     },
@@ -305,19 +570,43 @@
       "frames": [
         {
           "file": "look-0.png",
-          "hold": 40
+          "hold": 40,
+          "outfits": {
+            "witch": "look-0~witch.png",
+            "santa": "look-0~santa.png",
+            "beanie": "look-0~beanie.png",
+            "party": "look-0~party.png"
+          }
         },
         {
           "file": "look-1.png",
-          "hold": 40
+          "hold": 40,
+          "outfits": {
+            "witch": "look-1~witch.png",
+            "santa": "look-1~santa.png",
+            "beanie": "look-1~beanie.png",
+            "party": "look-1~party.png"
+          }
         },
         {
           "file": "look-2.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "look-2~witch.png",
+            "santa": "look-2~santa.png",
+            "beanie": "look-2~beanie.png",
+            "party": "look-2~party.png"
+          }
         },
         {
           "file": "look-3.png",
-          "hold": 20
+          "hold": 20,
+          "outfits": {
+            "witch": "look-3~witch.png",
+            "santa": "look-3~santa.png",
+            "beanie": "look-3~beanie.png",
+            "party": "look-3~party.png"
+          }
         }
       ]
     },
@@ -330,27 +619,63 @@
       "frames": [
         {
           "file": "glint-0.png",
-          "hold": 8
+          "hold": 8,
+          "outfits": {
+            "witch": "glint-0~witch.png",
+            "santa": "glint-0~santa.png",
+            "beanie": "glint-0~beanie.png",
+            "party": "glint-0~party.png"
+          }
         },
         {
           "file": "glint-1.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "glint-1~witch.png",
+            "santa": "glint-1~santa.png",
+            "beanie": "glint-1~beanie.png",
+            "party": "glint-1~party.png"
+          }
         },
         {
           "file": "glint-2.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "glint-2~witch.png",
+            "santa": "glint-2~santa.png",
+            "beanie": "glint-2~beanie.png",
+            "party": "glint-2~party.png"
+          }
         },
         {
           "file": "glint-3.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "glint-3~witch.png",
+            "santa": "glint-3~santa.png",
+            "beanie": "glint-3~beanie.png",
+            "party": "glint-3~party.png"
+          }
         },
         {
           "file": "glint-4.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "glint-4~witch.png",
+            "santa": "glint-4~santa.png",
+            "beanie": "glint-4~beanie.png",
+            "party": "glint-4~party.png"
+          }
         },
         {
           "file": "glint-5.png",
-          "hold": 10
+          "hold": 10,
+          "outfits": {
+            "witch": "glint-5~witch.png",
+            "santa": "glint-5~santa.png",
+            "beanie": "glint-5~beanie.png",
+            "party": "glint-5~party.png"
+          }
         }
       ]
     },
@@ -363,19 +688,43 @@
       "frames": [
         {
           "file": "groove-0.png",
-          "hold": 11
+          "hold": 11,
+          "outfits": {
+            "witch": "groove-0~witch.png",
+            "santa": "groove-0~santa.png",
+            "beanie": "groove-0~beanie.png",
+            "party": "groove-0~party.png"
+          }
         },
         {
           "file": "groove-1.png",
-          "hold": 7
+          "hold": 7,
+          "outfits": {
+            "witch": "groove-1~witch.png",
+            "santa": "groove-1~santa.png",
+            "beanie": "groove-1~beanie.png",
+            "party": "groove-1~party.png"
+          }
         },
         {
           "file": "groove-2.png",
-          "hold": 11
+          "hold": 11,
+          "outfits": {
+            "witch": "groove-2~witch.png",
+            "santa": "groove-2~santa.png",
+            "beanie": "groove-2~beanie.png",
+            "party": "groove-2~party.png"
+          }
         },
         {
           "file": "groove-3.png",
-          "hold": 7
+          "hold": 7,
+          "outfits": {
+            "witch": "groove-3~witch.png",
+            "santa": "groove-3~santa.png",
+            "beanie": "groove-3~beanie.png",
+            "party": "groove-3~party.png"
+          }
         }
       ]
     },
@@ -388,11 +737,23 @@
       "frames": [
         {
           "file": "phones-0.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "phones-0~witch.png",
+            "santa": "phones-0~santa.png",
+            "beanie": "phones-0~beanie.png",
+            "party": "phones-0~party.png"
+          }
         },
         {
           "file": "phones-1.png",
-          "hold": 6
+          "hold": 6,
+          "outfits": {
+            "witch": "phones-1~witch.png",
+            "santa": "phones-1~santa.png",
+            "beanie": "phones-1~beanie.png",
+            "party": "phones-1~party.png"
+          }
         }
       ]
     },
@@ -405,11 +766,23 @@
       "frames": [
         {
           "file": "unphones-0.png",
-          "hold": 6
+          "hold": 6,
+          "outfits": {
+            "witch": "unphones-0~witch.png",
+            "santa": "unphones-0~santa.png",
+            "beanie": "unphones-0~beanie.png",
+            "party": "unphones-0~party.png"
+          }
         },
         {
           "file": "unphones-1.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "unphones-1~witch.png",
+            "santa": "unphones-1~santa.png",
+            "beanie": "unphones-1~beanie.png",
+            "party": "unphones-1~party.png"
+          }
         }
       ]
     },
@@ -422,27 +795,63 @@
       "frames": [
         {
           "file": "charge-0.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "charge-0~witch.png",
+            "santa": "charge-0~santa.png",
+            "beanie": "charge-0~beanie.png",
+            "party": "charge-0~party.png"
+          }
         },
         {
           "file": "charge-1.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "charge-1~witch.png",
+            "santa": "charge-1~santa.png",
+            "beanie": "charge-1~beanie.png",
+            "party": "charge-1~party.png"
+          }
         },
         {
           "file": "charge-2.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "charge-2~witch.png",
+            "santa": "charge-2~santa.png",
+            "beanie": "charge-2~beanie.png",
+            "party": "charge-2~party.png"
+          }
         },
         {
           "file": "charge-3.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "charge-3~witch.png",
+            "santa": "charge-3~santa.png",
+            "beanie": "charge-3~beanie.png",
+            "party": "charge-3~party.png"
+          }
         },
         {
           "file": "charge-4.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "charge-4~witch.png",
+            "santa": "charge-4~santa.png",
+            "beanie": "charge-4~beanie.png",
+            "party": "charge-4~party.png"
+          }
         },
         {
           "file": "charge-5.png",
-          "hold": 60
+          "hold": 60,
+          "outfits": {
+            "witch": "charge-5~witch.png",
+            "santa": "charge-5~santa.png",
+            "beanie": "charge-5~beanie.png",
+            "party": "charge-5~party.png"
+          }
         }
       ]
     },
@@ -455,23 +864,53 @@
       "frames": [
         {
           "file": "flip-0.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-0~witch.png",
+            "santa": "flip-0~santa.png",
+            "beanie": "flip-0~beanie.png",
+            "party": "flip-0~party.png"
+          }
         },
         {
           "file": "flip-1.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-1~witch.png",
+            "santa": "flip-1~santa.png",
+            "beanie": "flip-1~beanie.png",
+            "party": "flip-1~party.png"
+          }
         },
         {
           "file": "flip-2.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-2~witch.png",
+            "santa": "flip-2~santa.png",
+            "beanie": "flip-2~beanie.png",
+            "party": "flip-2~party.png"
+          }
         },
         {
           "file": "flip-3.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-3~witch.png",
+            "santa": "flip-3~santa.png",
+            "beanie": "flip-3~beanie.png",
+            "party": "flip-3~party.png"
+          }
         },
         {
           "file": "flip-4.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-4~witch.png",
+            "santa": "flip-4~santa.png",
+            "beanie": "flip-4~beanie.png",
+            "party": "flip-4~party.png"
+          }
         }
       ]
     },
@@ -484,27 +923,63 @@
       "frames": [
         {
           "file": "charge-phones-0.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "charge-phones-0~witch.png",
+            "santa": "charge-phones-0~santa.png",
+            "beanie": "charge-phones-0~beanie.png",
+            "party": "charge-phones-0~party.png"
+          }
         },
         {
           "file": "charge-phones-1.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "charge-phones-1~witch.png",
+            "santa": "charge-phones-1~santa.png",
+            "beanie": "charge-phones-1~beanie.png",
+            "party": "charge-phones-1~party.png"
+          }
         },
         {
           "file": "charge-phones-2.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "charge-phones-2~witch.png",
+            "santa": "charge-phones-2~santa.png",
+            "beanie": "charge-phones-2~beanie.png",
+            "party": "charge-phones-2~party.png"
+          }
         },
         {
           "file": "charge-phones-3.png",
-          "hold": 3
+          "hold": 3,
+          "outfits": {
+            "witch": "charge-phones-3~witch.png",
+            "santa": "charge-phones-3~santa.png",
+            "beanie": "charge-phones-3~beanie.png",
+            "party": "charge-phones-3~party.png"
+          }
         },
         {
           "file": "charge-phones-4.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "charge-phones-4~witch.png",
+            "santa": "charge-phones-4~santa.png",
+            "beanie": "charge-phones-4~beanie.png",
+            "party": "charge-phones-4~party.png"
+          }
         },
         {
           "file": "charge-phones-5.png",
-          "hold": 60
+          "hold": 60,
+          "outfits": {
+            "witch": "charge-phones-5~witch.png",
+            "santa": "charge-phones-5~santa.png",
+            "beanie": "charge-phones-5~beanie.png",
+            "party": "charge-phones-5~party.png"
+          }
         }
       ]
     },
@@ -517,23 +992,53 @@
       "frames": [
         {
           "file": "flip-phones-0.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-phones-0~witch.png",
+            "santa": "flip-phones-0~santa.png",
+            "beanie": "flip-phones-0~beanie.png",
+            "party": "flip-phones-0~party.png"
+          }
         },
         {
           "file": "flip-phones-1.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-phones-1~witch.png",
+            "santa": "flip-phones-1~santa.png",
+            "beanie": "flip-phones-1~beanie.png",
+            "party": "flip-phones-1~party.png"
+          }
         },
         {
           "file": "flip-phones-2.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-phones-2~witch.png",
+            "santa": "flip-phones-2~santa.png",
+            "beanie": "flip-phones-2~beanie.png",
+            "party": "flip-phones-2~party.png"
+          }
         },
         {
           "file": "flip-phones-3.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-phones-3~witch.png",
+            "santa": "flip-phones-3~santa.png",
+            "beanie": "flip-phones-3~beanie.png",
+            "party": "flip-phones-3~party.png"
+          }
         },
         {
           "file": "flip-phones-4.png",
-          "hold": 999
+          "hold": 999,
+          "outfits": {
+            "witch": "flip-phones-4~witch.png",
+            "santa": "flip-phones-4~santa.png",
+            "beanie": "flip-phones-4~beanie.png",
+            "party": "flip-phones-4~party.png"
+          }
         }
       ]
     },
@@ -546,19 +1051,43 @@
       "frames": [
         {
           "file": "land-phones-0.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "land-phones-0~witch.png",
+            "santa": "land-phones-0~santa.png",
+            "beanie": "land-phones-0~beanie.png",
+            "party": "land-phones-0~party.png"
+          }
         },
         {
           "file": "land-phones-1.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "land-phones-1~witch.png",
+            "santa": "land-phones-1~santa.png",
+            "beanie": "land-phones-1~beanie.png",
+            "party": "land-phones-1~party.png"
+          }
         },
         {
           "file": "land-phones-2.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "land-phones-2~witch.png",
+            "santa": "land-phones-2~santa.png",
+            "beanie": "land-phones-2~beanie.png",
+            "party": "land-phones-2~party.png"
+          }
         },
         {
           "file": "land-phones-3.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "land-phones-3~witch.png",
+            "santa": "land-phones-3~santa.png",
+            "beanie": "land-phones-3~beanie.png",
+            "party": "land-phones-3~party.png"
+          }
         }
       ]
     },
@@ -583,6 +1112,565 @@
         }
       ]
     },
+    "feel": {
+      "next": "groove",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "feel-0.png",
+          "hold": 30,
+          "outfits": {
+            "witch": "feel-0~witch.png",
+            "santa": "feel-0~santa.png",
+            "beanie": "feel-0~beanie.png",
+            "party": "feel-0~party.png"
+          }
+        },
+        {
+          "file": "feel-1.png",
+          "hold": 12,
+          "outfits": {
+            "witch": "feel-1~witch.png",
+            "santa": "feel-1~santa.png",
+            "beanie": "feel-1~beanie.png",
+            "party": "feel-1~party.png"
+          }
+        },
+        {
+          "file": "feel-2.png",
+          "hold": 30,
+          "outfits": {
+            "witch": "feel-2~witch.png",
+            "santa": "feel-2~santa.png",
+            "beanie": "feel-2~beanie.png",
+            "party": "feel-2~party.png"
+          }
+        }
+      ]
+    },
+    "fingerup": {
+      "next": "groove",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "fingerup-0.png",
+          "hold": 40,
+          "outfits": {
+            "witch": "fingerup-0~witch.png",
+            "santa": "fingerup-0~santa.png",
+            "beanie": "fingerup-0~beanie.png",
+            "party": "fingerup-0~party.png"
+          }
+        },
+        {
+          "file": "fingerup-1.png",
+          "hold": 8,
+          "outfits": {
+            "witch": "fingerup-1~witch.png",
+            "santa": "fingerup-1~santa.png",
+            "beanie": "fingerup-1~beanie.png",
+            "party": "fingerup-1~party.png"
+          }
+        },
+        {
+          "file": "fingerup-2.png",
+          "hold": 20,
+          "outfits": {
+            "witch": "fingerup-2~witch.png",
+            "santa": "fingerup-2~santa.png",
+            "beanie": "fingerup-2~beanie.png",
+            "party": "fingerup-2~party.png"
+          }
+        }
+      ]
+    },
+    "sway": {
+      "next": "groove",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "sway-0.png",
+          "hold": 18,
+          "outfits": {
+            "witch": "sway-0~witch.png",
+            "santa": "sway-0~santa.png",
+            "beanie": "sway-0~beanie.png",
+            "party": "sway-0~party.png"
+          }
+        },
+        {
+          "file": "sway-1.png",
+          "hold": 9,
+          "outfits": {
+            "witch": "sway-1~witch.png",
+            "santa": "sway-1~santa.png",
+            "beanie": "sway-1~beanie.png",
+            "party": "sway-1~party.png"
+          }
+        },
+        {
+          "file": "sway-2.png",
+          "hold": 18,
+          "outfits": {
+            "witch": "sway-2~witch.png",
+            "santa": "sway-2~santa.png",
+            "beanie": "sway-2~beanie.png",
+            "party": "sway-2~party.png"
+          }
+        },
+        {
+          "file": "sway-3.png",
+          "hold": 9,
+          "outfits": {
+            "witch": "sway-3~witch.png",
+            "santa": "sway-3~santa.png",
+            "beanie": "sway-3~beanie.png",
+            "party": "sway-3~party.png"
+          }
+        },
+        {
+          "file": "sway-4.png",
+          "hold": 18,
+          "outfits": {
+            "witch": "sway-4~witch.png",
+            "santa": "sway-4~santa.png",
+            "beanie": "sway-4~beanie.png",
+            "party": "sway-4~party.png"
+          }
+        },
+        {
+          "file": "sway-5.png",
+          "hold": 9,
+          "outfits": {
+            "witch": "sway-5~witch.png",
+            "santa": "sway-5~santa.png",
+            "beanie": "sway-5~beanie.png",
+            "party": "sway-5~party.png"
+          }
+        },
+        {
+          "file": "sway-6.png",
+          "hold": 18,
+          "outfits": {
+            "witch": "sway-6~witch.png",
+            "santa": "sway-6~santa.png",
+            "beanie": "sway-6~beanie.png",
+            "party": "sway-6~party.png"
+          }
+        }
+      ]
+    },
+    "candle": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "candle-0.png",
+          "hold": 7,
+          "outfits": {
+            "witch": "candle-0~witch.png",
+            "santa": "candle-0~santa.png",
+            "beanie": "candle-0~beanie.png",
+            "party": "candle-0~party.png"
+          }
+        },
+        {
+          "file": "candle-1.png",
+          "hold": 7,
+          "outfits": {
+            "witch": "candle-1~witch.png",
+            "santa": "candle-1~santa.png",
+            "beanie": "candle-1~beanie.png",
+            "party": "candle-1~party.png"
+          }
+        },
+        {
+          "file": "candle-2.png",
+          "hold": 7,
+          "outfits": {
+            "witch": "candle-2~witch.png",
+            "santa": "candle-2~santa.png",
+            "beanie": "candle-2~beanie.png",
+            "party": "candle-2~party.png"
+          }
+        }
+      ]
+    },
+    "walk": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "walk-0.png",
+          "hold": 6,
+          "outfits": {
+            "witch": "walk-0~witch.png",
+            "santa": "walk-0~santa.png",
+            "beanie": "walk-0~beanie.png",
+            "party": "walk-0~party.png"
+          }
+        },
+        {
+          "file": "walk-1.png",
+          "hold": 6,
+          "outfits": {
+            "witch": "walk-1~witch.png",
+            "santa": "walk-1~santa.png",
+            "beanie": "walk-1~beanie.png",
+            "party": "walk-1~party.png"
+          }
+        },
+        {
+          "file": "walk-2.png",
+          "hold": 6,
+          "outfits": {
+            "witch": "walk-2~witch.png",
+            "santa": "walk-2~santa.png",
+            "beanie": "walk-2~beanie.png",
+            "party": "walk-2~party.png"
+          }
+        },
+        {
+          "file": "walk-3.png",
+          "hold": 6,
+          "outfits": {
+            "witch": "walk-3~witch.png",
+            "santa": "walk-3~santa.png",
+            "beanie": "walk-3~beanie.png",
+            "party": "walk-3~party.png"
+          }
+        }
+      ]
+    },
+    "grabbed": {
+      "next": "held",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "grabbed-0.png",
+          "hold": 10,
+          "outfits": {
+            "witch": "grabbed-0~witch.png",
+            "santa": "grabbed-0~santa.png",
+            "beanie": "grabbed-0~beanie.png",
+            "party": "grabbed-0~party.png"
+          }
+        }
+      ]
+    },
+    "held": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "held-0.png",
+          "hold": 9,
+          "outfits": {
+            "witch": "held-0~witch.png",
+            "santa": "held-0~santa.png",
+            "beanie": "held-0~beanie.png",
+            "party": "held-0~party.png"
+          }
+        },
+        {
+          "file": "held-1.png",
+          "hold": 9,
+          "outfits": {
+            "witch": "held-1~witch.png",
+            "santa": "held-1~santa.png",
+            "beanie": "held-1~beanie.png",
+            "party": "held-1~party.png"
+          }
+        }
+      ]
+    },
+    "wince": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "wince-0.png",
+          "hold": 5,
+          "outfits": {
+            "witch": "wince-0~witch.png",
+            "santa": "wince-0~santa.png",
+            "beanie": "wince-0~beanie.png",
+            "party": "wince-0~party.png"
+          }
+        },
+        {
+          "file": "wince-1.png",
+          "hold": 18,
+          "outfits": {
+            "witch": "wince-1~witch.png",
+            "santa": "wince-1~santa.png",
+            "beanie": "wince-1~beanie.png",
+            "party": "wince-1~party.png"
+          }
+        },
+        {
+          "file": "wince-2.png",
+          "hold": 5,
+          "outfits": {
+            "witch": "wince-2~witch.png",
+            "santa": "wince-2~santa.png",
+            "beanie": "wince-2~beanie.png",
+            "party": "wince-2~party.png"
+          }
+        },
+        {
+          "file": "wince-3.png",
+          "hold": 12,
+          "outfits": {
+            "witch": "wince-3~witch.png",
+            "santa": "wince-3~santa.png",
+            "beanie": "wince-3~beanie.png",
+            "party": "wince-3~party.png"
+          }
+        }
+      ]
+    },
+    "fistpump": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "fistpump-0.png",
+          "hold": 4,
+          "outfits": {
+            "witch": "fistpump-0~witch.png",
+            "santa": "fistpump-0~santa.png",
+            "beanie": "fistpump-0~beanie.png",
+            "party": "fistpump-0~party.png"
+          }
+        },
+        {
+          "file": "fistpump-1.png",
+          "hold": 7,
+          "outfits": {
+            "witch": "fistpump-1~witch.png",
+            "santa": "fistpump-1~santa.png",
+            "beanie": "fistpump-1~beanie.png",
+            "party": "fistpump-1~party.png"
+          }
+        },
+        {
+          "file": "fistpump-2.png",
+          "hold": 4,
+          "outfits": {
+            "witch": "fistpump-2~witch.png",
+            "santa": "fistpump-2~santa.png",
+            "beanie": "fistpump-2~beanie.png",
+            "party": "fistpump-2~party.png"
+          }
+        },
+        {
+          "file": "fistpump-3.png",
+          "hold": 12,
+          "outfits": {
+            "witch": "fistpump-3~witch.png",
+            "santa": "fistpump-3~santa.png",
+            "beanie": "fistpump-3~beanie.png",
+            "party": "fistpump-3~party.png"
+          }
+        },
+        {
+          "file": "fistpump-4.png",
+          "hold": 4,
+          "outfits": {
+            "witch": "fistpump-4~witch.png",
+            "santa": "fistpump-4~santa.png",
+            "beanie": "fistpump-4~beanie.png",
+            "party": "fistpump-4~party.png"
+          }
+        },
+        {
+          "file": "fistpump-5.png",
+          "hold": 2,
+          "outfits": {
+            "witch": "fistpump-5~witch.png",
+            "santa": "fistpump-5~santa.png",
+            "beanie": "fistpump-5~beanie.png",
+            "party": "fistpump-5~party.png"
+          }
+        },
+        {
+          "file": "fistpump-6.png",
+          "hold": 2,
+          "outfits": {
+            "witch": "fistpump-6~witch.png",
+            "santa": "fistpump-6~santa.png",
+            "beanie": "fistpump-6~beanie.png",
+            "party": "fistpump-6~party.png"
+          }
+        }
+      ]
+    },
+    "proud": {
+      "next": "idle",
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": true,
+      "frames": [
+        {
+          "file": "proud-0.png",
+          "hold": 8,
+          "outfits": {
+            "witch": "proud-0~witch.png",
+            "santa": "proud-0~santa.png",
+            "beanie": "proud-0~beanie.png",
+            "party": "proud-0~party.png"
+          }
+        },
+        {
+          "file": "proud-1.png",
+          "hold": 10,
+          "outfits": {
+            "witch": "proud-1~witch.png",
+            "santa": "proud-1~santa.png",
+            "beanie": "proud-1~beanie.png",
+            "party": "proud-1~party.png"
+          }
+        },
+        {
+          "file": "proud-2.png",
+          "hold": 24,
+          "outfits": {
+            "witch": "proud-2~witch.png",
+            "santa": "proud-2~santa.png",
+            "beanie": "proud-2~beanie.png",
+            "party": "proud-2~party.png"
+          }
+        },
+        {
+          "file": "proud-3.png",
+          "hold": 10,
+          "outfits": {
+            "witch": "proud-3~witch.png",
+            "santa": "proud-3~santa.png",
+            "beanie": "proud-3~beanie.png",
+            "party": "proud-3~party.png"
+          }
+        },
+        {
+          "file": "proud-4.png",
+          "hold": 6,
+          "outfits": {
+            "witch": "proud-4~witch.png",
+            "santa": "proud-4~santa.png",
+            "beanie": "proud-4~beanie.png",
+            "party": "proud-4~party.png"
+          }
+        },
+        {
+          "file": "proud-5.png",
+          "hold": 2,
+          "outfits": {
+            "witch": "proud-5~witch.png",
+            "santa": "proud-5~santa.png",
+            "beanie": "proud-5~beanie.png",
+            "party": "proud-5~party.png"
+          }
+        },
+        {
+          "file": "proud-6.png",
+          "hold": 2,
+          "outfits": {
+            "witch": "proud-6~witch.png",
+            "santa": "proud-6~santa.png",
+            "beanie": "proud-6~beanie.png",
+            "party": "proud-6~party.png"
+          }
+        },
+        {
+          "file": "proud-7.png",
+          "hold": 2,
+          "outfits": {
+            "witch": "proud-7~witch.png",
+            "santa": "proud-7~santa.png",
+            "beanie": "proud-7~beanie.png",
+            "party": "proud-7~party.png"
+          }
+        },
+        {
+          "file": "proud-8.png",
+          "hold": 2,
+          "outfits": {
+            "witch": "proud-8~witch.png",
+            "santa": "proud-8~santa.png",
+            "beanie": "proud-8~beanie.png",
+            "party": "proud-8~party.png"
+          }
+        }
+      ]
+    },
+    "sleep": {
+      "next": null,
+      "shades": "down",
+      "transition": false,
+      "from": "down",
+      "internal": false,
+      "frames": [
+        {
+          "file": "sleep-0.png",
+          "hold": 34,
+          "outfits": {
+            "witch": "sleep-0~witch.png",
+            "santa": "sleep-0~santa.png",
+            "beanie": "sleep-0~beanie.png",
+            "party": "sleep-0~party.png"
+          }
+        },
+        {
+          "file": "sleep-1.png",
+          "hold": 34,
+          "outfits": {
+            "witch": "sleep-1~witch.png",
+            "santa": "sleep-1~santa.png",
+            "beanie": "sleep-1~beanie.png",
+            "party": "sleep-1~party.png"
+          }
+        },
+        {
+          "file": "sleep-2.png",
+          "hold": 34,
+          "outfits": {
+            "witch": "sleep-2~witch.png",
+            "santa": "sleep-2~santa.png",
+            "beanie": "sleep-2~beanie.png",
+            "party": "sleep-2~party.png"
+          }
+        }
+      ]
+    },
     "leap": {
       "next": "fly",
       "shades": "down",
@@ -592,7 +1680,13 @@
       "frames": [
         {
           "file": "leap-0.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "leap-0~witch.png",
+            "santa": "leap-0~santa.png",
+            "beanie": "leap-0~beanie.png",
+            "party": "leap-0~party.png"
+          }
         }
       ]
     },
@@ -605,7 +1699,13 @@
       "frames": [
         {
           "file": "fly-0.png",
-          "hold": 30
+          "hold": 30,
+          "outfits": {
+            "witch": "fly-0~witch.png",
+            "santa": "fly-0~santa.png",
+            "beanie": "fly-0~beanie.png",
+            "party": "fly-0~party.png"
+          }
         }
       ]
     },
@@ -618,7 +1718,13 @@
       "frames": [
         {
           "file": "touchdown-0.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "touchdown-0~witch.png",
+            "santa": "touchdown-0~santa.png",
+            "beanie": "touchdown-0~beanie.png",
+            "party": "touchdown-0~party.png"
+          }
         }
       ]
     },
@@ -631,19 +1737,43 @@
       "frames": [
         {
           "file": "land-0.png",
-          "hold": 5
+          "hold": 5,
+          "outfits": {
+            "witch": "land-0~witch.png",
+            "santa": "land-0~santa.png",
+            "beanie": "land-0~beanie.png",
+            "party": "land-0~party.png"
+          }
         },
         {
           "file": "land-1.png",
-          "hold": 4
+          "hold": 4,
+          "outfits": {
+            "witch": "land-1~witch.png",
+            "santa": "land-1~santa.png",
+            "beanie": "land-1~beanie.png",
+            "party": "land-1~party.png"
+          }
         },
         {
           "file": "land-2.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "land-2~witch.png",
+            "santa": "land-2~santa.png",
+            "beanie": "land-2~beanie.png",
+            "party": "land-2~party.png"
+          }
         },
         {
           "file": "land-3.png",
-          "hold": 2
+          "hold": 2,
+          "outfits": {
+            "witch": "land-3~witch.png",
+            "santa": "land-3~santa.png",
+            "beanie": "land-3~beanie.png",
+            "party": "land-3~party.png"
+          }
         }
       ]
     }

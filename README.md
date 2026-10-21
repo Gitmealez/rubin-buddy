@@ -9,7 +9,42 @@ thing, and the things he says are written for the character, not quoted from him
 
 ![Every frame of every animation](preview.png)
 
-## New: headphones, and a window to stand on
+## New: a little more alive
+
+**He goes for a walk.** Now and then, in the quiet, he turns side-on and
+strolls a little way along the edge he's standing on, looks around, and walks
+back to his spot. Anything that needs him cuts it short with a hop home.
+
+**Pick him up, and throw him.** Grab him and he hangs on, legs kicking. Fling
+him and he tumbles through the air — off the sides of the screen, under
+gravity — and lands hard on your window or the bottom of the screen, then
+dusts himself off and jumps back to his spot. Land him on a window's top edge
+and that's where he stands. `state.sh fling 1400 900` throws him from a script.
+
+**He reacts to how the work goes.** While Claude is working he glows a little,
+Claude-orange, breathing in and out — even mid-groove, so the music never hides
+that work is happening. A failed command gets a wince and a facepalm; the first
+command that works after failures gets a fist in the air; a long task finishing
+gets the slow nod and a glint off the shades.
+
+**Moments in the music.** Grooving a while, he presses a headphone cup to his
+ear to hear it properly, puts one finger up at the part that matters, or sways.
+
+**He sleeps.** Late at night with nobody around, he nods off sitting up, Z's
+rising. When you're back, he stands and has a long stretch.
+
+**A candle for the quiet sit.** Choose Sit with Me and a small candle lights
+beside him, flickering, smoke curling off it, for the 25 minutes.
+
+**Dressed for the season.** A witch's hat the last week of October, a Santa hat
+around Christmas, a party hat for New Year's, a beanie the rest of the winter
+— on every pose, jumps included. **Outfit** in the menu picks one for good,
+or none.
+
+**Save a GIF of Rick…** in the menu makes a few seconds of him — the charge,
+the spinning jump, the landing, a fist pump — to share.
+
+## Headphones, and a window to stand on
 
 **He puts his headphones on when your music plays** — Spotify, Apple Music,
 a YouTube tab, anything. His hands go up, the Claude-orange cups go on, and he
@@ -25,7 +60,10 @@ it takes three seconds of steady sound to count, so a notification ding
 doesn't put the headphones on, and four of quiet to stop. A call isn't music:
 an app using the microphone as well is left out, and so are the usual meeting
 apps (Zoom, Teams, Slack, Discord, WhatsApp…). Any sound counts, so a talking
-YouTube video counts too. `~/.rubin-buddy/state.sh groove` puts the
+YouTube video counts too. Some apps keep a sound channel open even when
+silent; dictation tools like Wispr Flow are left out from the start, and
+**Music From** in the menu lists the apps making sound right now — untick one
+and it never counts again. `~/.rubin-buddy/state.sh groove` puts the
 headphones on by hand. Off under **Headphones with Music**.
 
 **He stands on the window you're working in.** Feet on its title bar, a soft
@@ -97,7 +135,8 @@ with ordinary ChatGPT conversations in a browser.
 
 Undo with `~/.rubin-buddy/hooks.sh --codex --remove`. Uninstall removes both
 Claude and Codex connections. The adapter stores only a hashed session ID,
-provider, project directory’s final name, state, event name, and timestamp.
+provider, project directory’s final name, state, event name, timestamp, and
+when a command last failed or recovered (times and a count, for his reactions).
 It does not retain hook prompts, tool inputs, code, or transcript paths.
 
 Sources: [Codex hooks](https://learn.chatgpt.com/docs/hooks) ·
@@ -192,6 +231,8 @@ The bald silhouette with the shades. Everything lives there:
 | Chatter | Silent · Quiet (5–15 min) · Normal (2.5–7 min) · Talkative (45 s–2 min) |
 | Quiet for an Hour | One click before a meeting; restores itself. Unlike Silent, it can't be forgotten. |
 | Pose | Play any animation directly |
+| Outfit | Seasonal (the default), none, or one hat for good |
+| Save a GIF of Rick… | A few seconds of him on paper, to share |
 | Say Something | A line on demand |
 | Take a Breath | A guided minute — he sits, the bubble paces you |
 | Follow Claude Code | Wires / unwires the hooks — same merge as `hooks.sh` |
@@ -414,7 +455,7 @@ Drive him by hand with any animation name:
 ~/.rubin-buddy/state.sh glasses
 ```
 
-`idle` · `think` · `stroke` · `nod` · `glasses` · `unglasses` · `look` · `sitdown` · `meditate` · `standup` · `glance` · `adjust` · `stretch` · `tea` · `glint` · `groove` — plus two words that aren't animations: `breathe` starts a guided breath, and `say` borrows his voice:
+`idle` · `think` · `stroke` · `nod` · `glasses` · `unglasses` · `look` · `sitdown` · `meditate` · `standup` · `glance` · `adjust` · `stretch` · `tea` · `glint` · `groove` · `sleep` — plus some words that aren't animations: `breathe` starts a guided breath, `sit` starts (or ends) the quiet sit, `stroll` sends him for a walk, `fling <dx> <dy>` throws him (points a second, up is positive), and `say` borrows his voice:
 
 ```bash
 ~/.rubin-buddy/state.sh say "Deploy is green."
@@ -497,6 +538,9 @@ manifest.
 | `RUBIN_DEBUG` | off | `1` logs every animation change to stderr |
 | `RUBIN_UPDATE_DELAY` | `45` | Seconds after launch before the first update check |
 | `RUBIN_CTX_FAST` | off | `1` compresses every contextual timer to seconds, for testing |
+| `RUBIN_DATE` | today | `YYYY-MM-DD` pretends it's that day, for seasonal outfits |
+| `RUBIN_SNAPSHOTS` | off | A folder: every frame he shows is written there as drawn (glow, mirroring, hat) |
+| `RUBIN_GIF_OUT` | off | A path: writes the shareable GIF there at launch |
 
 `RUBIN_SCALE` and `RUBIN_CHATTER` given at launch override the remembered menu
 choice for that run.
@@ -535,6 +579,16 @@ lays the contact shadow into those rows below the line; animations marked `airbo
 get none, and `internal` ones (the hop, the headphones going on) stay out of
 the Pose menu.
 
+Above his head, every frame gets four empty rows of **headroom** (`HEADROOM`;
+`headroom` in the manifest counts it with the rim's pad). Marks drawn up there —
+the Z's, the "!", a frustration cross — are given as `marks` with negative
+rows. Seasonal hats (`OUTFITS`) are composed per frame by finding the top of his
+dome (the first run of six outline pixels), so any new pose wears them for free;
+spinning frames are dressed before they're turned. Each dressed frame is its
+own `name-i~outfit.png`, listed under `outfits` in the manifest. The walk is a
+separate profile drawing (`PROFILE_TOP` and `STRIDE`), facing right — the app
+mirrors it.
+
 ### The rim light
 
 His tee is `#1f1c1c` and his outline `#17120f`, which on a dark desktop left only
@@ -556,7 +610,7 @@ and no row strings have to account for the extra pixel.
 `scale` is a decimal, but each sprite pixel is snapped to a whole number of
 **device** pixels before the window is sized — otherwise some sprite pixels land
 on 4 device pixels and their neighbours on 5, which reads as a wobble along every
-straight edge. So the same `scale` gives 65×85 on a 2× display and 78×102 on a 1×
+straight edge. So the same `scale` gives 65×95 on a 2× display and 78×114 on a 1×
 one, and both are pixel-exact.
 
 ## The mixed-DPI crash, and why the anchor matters
@@ -598,8 +652,9 @@ Dragging him fully off every display is refused now too.
 ## Known rough edges
 
 - He can't tell music from other sound: a talking video or a game puts the
-  headphones on too. Calls don't, unless the microphone is off in an app he
-  doesn't know is for calls.
+  headphones on too, and so does an app that holds a silent sound channel
+  open — untick it under **Music From**. Calls don't count, unless the
+  microphone is off in an app he doesn't know is for calls.
 - Standing on windows follows the front window of the front app. Apps that keep
   an invisible full-size window in front (rare) can leave him on its edge.
 - Session hooks arrive asynchronously; their received order can differ from the agent’s event order. Per-session atomic files prevent one project from overwriting another. Inactive working sessions become “status unknown” after 30 minutes, not “finished.” Waiting and review states remain until the session changes or ends (up to seven days).

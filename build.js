@@ -3,7 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const { encodePNG } = require('./png');
 const {
-  OUT_W, OUT_H, ANIMATIONS, MENU_ICON, rasterize, rasterizeMask, withRim, withShadow,
+  OUT_W, OUT_H, HEADROOM, ANIMATIONS, OUTFITS, MENU_ICON, rasterize, rasterizeMask, withRim,
+  withShadow, prepare,
 } = require('./sprite');
 
 const OUT = path.join(__dirname, 'frames');
@@ -16,10 +17,11 @@ for (const f of fs.readdirSync(OUT)) fs.unlinkSync(path.join(OUT, f));
 const rimmed = {};
 const manifest = {};
 for (const [name, anim] of Object.entries(ANIMATIONS)) {
-  rimmed[name] = anim.frames.map((frame) => {
-    const rim = withRim(frame.rows, frame.aura ? 'O' : 'o');  // `aura`: the charge glow
-    return anim.airborne ? rim : withShadow(rim, frame.rows);
-  });
+  const finish = (rows, frame) => {
+    const rim = withRim(rows, frame.aura ? 'O' : 'o');  // `aura`: the charge glow
+    return anim.airborne ? rim : withShadow(rim, rows);
+  };
+  rimmed[name] = anim.frames.map((frame, i) => finish(prepare(frame, `${name}-${i}`), frame));
   manifest[name] = {
     next: anim.next ?? null,
     shades: anim.shades ?? 'down',
@@ -30,17 +32,30 @@ for (const [name, anim] of Object.entries(ANIMATIONS)) {
       const file = `${name}-${i}.png`;
       const { width, height, data } = rasterize(rimmed[name][i], 1);
       fs.writeFileSync(path.join(OUT, file), encodePNG(width, height, data));
-      return { file, hold: frame.hold };
+      // Seasonal outfits: the same frame with a hat, wherever his dome shows.
+      const outfits = {};
+      const bare = prepare(frame, `${name}-${i}`).join('');
+      for (const outfit of Object.keys(OUTFITS)) {
+        const dressed = prepare(frame, `${name}-${i}~${outfit}`, outfit);
+        if (dressed.join('') === bare) continue;
+        const dressedFile = `${name}-${i}~${outfit}.png`;
+        const img = rasterize(finish(dressed, frame), 1);
+        fs.writeFileSync(path.join(OUT, dressedFile), encodePNG(img.width, img.height, img.data));
+        outfits[outfit] = dressedFile;
+      }
+      return Object.keys(outfits).length ? { file, hold: frame.hold, outfits } : { file, hold: frame.hold };
     }),
   };
 }
 // `baseline`: image rows below the ground line he stands on — the contact
 // shadow lives there. The app puts this line on a window's edge when he perches.
+// `headroom`: empty image rows over his head, kept clear for marks and hats.
 const feet = ANIMATIONS.idle.frames[0].rows.findLastIndex((row) => /[^.]/.test(row));
-const baseline = OUT_H - (feet + 1 + (OUT_H - ANIMATIONS.idle.frames[0].rows.length) / 2);
+const baseline = ANIMATIONS.idle.frames[0].rows.length - 1 - feet + 1;  // + the rim's pad row
 fs.writeFileSync(
   path.join(OUT, 'manifest.json'),
-  JSON.stringify({ width: OUT_W, height: OUT_H, baseline, animations: manifest }, null, 2)
+  JSON.stringify(
+    { width: OUT_W, height: OUT_H, baseline, headroom: HEADROOM + 1, animations: manifest }, null, 2)
 );
 
 // 2x so it's crisp at 16pt on a retina menu bar.
