@@ -9,7 +9,54 @@ thing, and the things he says are written for the character, not quoted from him
 
 ![Every frame of every animation](preview.png)
 
-## New: a little more useful, just as quiet
+## New: headphones, and a window to stand on
+
+**He puts his headphones on when your music plays** — Spotify, Apple Music,
+a YouTube tab, anything. His hands go up, the Claude-orange cups go on, and he
+nods along at about 100 BPM with a note rising off the beat. Claude working or
+finishing doesn't interrupt the groove — the menu bar shows it — but Claude
+*needing* you does: headphones off, shades up. Stop the music and they come off.
+
+Spotify and Apple Music announce play and pause to the whole system, so they
+get an instant reaction. Everything else comes from Core Audio's list of which
+apps are sending sound to the speakers — no permission, and nothing of the
+sound itself, only which apps are making some. That's checked once a second;
+it takes three seconds of steady sound to count, so a notification ding
+doesn't put the headphones on, and four of quiet to stop. A call isn't music:
+an app using the microphone as well is left out, and so are the usual meeting
+apps (Zoom, Teams, Slack, Discord, WhatsApp…). Any sound counts, so a talking
+YouTube video counts too. `~/.rubin-buddy/state.sh groove` puts the
+headphones on by hand. Off under **Headphones with Music**.
+
+**He stands on the window you're working in.** Feet on its title bar, a soft
+shadow underneath. Drag the window and he rides along. Switch to another and
+he jumps for it: he sinks low, glows Claude-orange as sparks climb around him,
+trembles, the light catches his shades — and he launches, leaving a burst
+behind, tucks and spins through the air, and lands hard in a puff of dust.
+With the headphones on he does it all with them on, and lands still grooving.
+Short distances get a plain hop. Close a window and he goes to whatever's in
+front next. Seated, he glides rather than jumps.
+
+A maximized window has no room above it, so he goes inside it: to the top-right
+corner under the toolbar, away from the bottom where you type. Put him
+somewhere else inside an app's window and that's his spot in that app from
+then on; drop him back on a window's top edge and he stands on top again.
+Dragged along a top edge, he remembers where along it. With nothing open, he
+goes back to his usual spot on the desktop.
+
+The window list he reads gives positions and owners without any permission;
+titles would need Screen Recording, and he never asks. It's checked the moment
+you switch apps, twice a second otherwise (about a millisecond each), and every
+frame while a window is being dragged. Fresh installs start with it on; if you already had him, he keeps the
+spot you gave him until you choose **Stand on Your Window**.
+
+**And a glow-up.** He breathes with his feet planted — his whole body used to
+bob, which looked fine floating in a corner and wrong standing on something.
+A contact shadow under every grounded pose, a glint that slides across the
+shades now and then, steam off the tea, and the stretch no longer leaves a
+spare pair of hands at his hips.
+
+## A little more useful, just as quiet
 
 Click Rick’s menu bar head to open his companion panel. Right-click the sprite
 for the full settings menu. Keep a thought, copy it as a PNG picture, browse
@@ -139,6 +186,8 @@ The bald silhouette with the shades. Everything lives there:
 | Follow Codex | Adds Codex hooks; requires review and trust in Codex |
 | Show / Hide Rick | Toggle without quitting |
 | **Bring Him Back** | Drops him bottom-right on the main screen, shades up. The "I've lost him" button. |
+| Stand on Your Window | Stands on the front window and jumps between them |
+| Headphones with Music | Headphones on while music plays, from any app |
 | Size | Tiny · Small · Medium · Large |
 | Chatter | Silent · Quiet (5–15 min) · Normal (2.5–7 min) · Talkative (45 s–2 min) |
 | Quiet for an Hour | One click before a meeting; restores itself. Unlike Silent, it can't be forgotten. |
@@ -152,8 +201,9 @@ The bald silhouette with the shades. Everything lives there:
 
 Size, chatter and auto-update persist across restarts.
 
-You can also **drag** him anywhere (his position is remembered), **click** him
-for a nod and a line, or **right-click** him for the same menu.
+You can also **drag** him anywhere (his position is remembered — or, standing
+on windows, where along the edge he stands), **click** him for a nod and a
+line, or **right-click** him for the same menu.
 
 ## Updating
 
@@ -364,7 +414,7 @@ Drive him by hand with any animation name:
 ~/.rubin-buddy/state.sh glasses
 ```
 
-`idle` · `think` · `stroke` · `nod` · `glasses` · `unglasses` · `look` · `sitdown` · `meditate` · `standup` · `glance` · `adjust` · `stretch` · `tea` — plus two words that aren't animations: `breathe` starts a guided breath, and `say` borrows his voice:
+`idle` · `think` · `stroke` · `nod` · `glasses` · `unglasses` · `look` · `sitdown` · `meditate` · `standup` · `glance` · `adjust` · `stretch` · `tea` · `glint` · `groove` — plus two words that aren't animations: `breathe` starts a guided breath, and `say` borrows his voice:
 
 ```bash
 ~/.rubin-buddy/state.sh say "Deploy is green."
@@ -379,8 +429,8 @@ Reacting to Claude Code turned out to be the smaller half of looking alive —
 between turns he sat in a two-frame bob for minutes, which is most of what
 anyone actually saw. So idleness has a life of its own now: he strokes the beard, sits
 with a thought, pushes his shades up and looks around, glances about the room,
-adjusts his shades, stretches, or takes a slow sip of tea — never the same
-gesture twice running. Coming to rest after work invites a gesture within
+adjusts his shades, catches the light on them, stretches, or takes a slow sip
+of tea — never the same gesture twice running. Coming to rest after work invites a gesture within
 seconds; deeper quiet spaces them out to every half-minute or so. A real Claude Code event
 cancels any fidget instantly and pushes the next one out, so fidgets only ever
 happen in genuine quiet. (`RUBIN_CTX_FAST=1` compresses the timing for testing.)
@@ -460,7 +510,7 @@ build instead of quietly shearing the sprite. Rows are assembled from
 `c('w', 14)`-style runs rather than typed out literally, for the same reason.
 This caught three real mistakes while drawing him.
 
-Five constraints worth keeping if you redraw him:
+Constraints worth keeping if you redraw him:
 
 1. **Beard over dome, heavily.** 4 rows of scalp against 16 rows of beard. Even
    proportions read as a garden gnome.
@@ -475,6 +525,15 @@ Five constraints worth keeping if you redraw him:
    the face with no special-casing. Row 3 is only 10 wide, so the crown has its
    own narrower band — and mixing the two widths is what makes the pushed-up
    shades read as tilted rather than flat.
+
+Two more since he started standing on windows: **every grounded pose keeps
+its base on row 30** (standing feet and the seated base alike — the app puts
+that line on a window's edge, and `baseline` in the manifest says how many
+image rows hang below it), and **breathing moves the head, never the feet**
+(`breathe()` shifts only the head band). `withShadow()`, applied in `build.js`,
+lays the contact shadow into those rows below the line; animations marked `airborne`
+get none, and `internal` ones (the hop, the headphones going on) stay out of
+the Pose menu.
 
 ### The rim light
 
@@ -538,6 +597,11 @@ Dragging him fully off every display is refused now too.
 
 ## Known rough edges
 
+- He can't tell music from other sound: a talking video or a game puts the
+  headphones on too. Calls don't, unless the microphone is off in an app he
+  doesn't know is for calls.
+- Standing on windows follows the front window of the front app. Apps that keep
+  an invisible full-size window in front (rare) can leave him on its edge.
 - Session hooks arrive asynchronously; their received order can differ from the agent’s event order. Per-session atomic files prevent one project from overwriting another. Inactive working sessions become “status unknown” after 30 minutes, not “finished.” Waiting and review states remain until the session changes or ends (up to seven days).
 - If the display he's parked on is unplugged he's hauled back to the main screen's
   bottom-right, which loses his position. Better than being stranded, and "Bring

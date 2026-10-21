@@ -11,6 +11,7 @@
 // Run:    ./buddy [framesDir] [scale]
 
 import AppKit
+import CoreAudio
 import Darwin
 
 // A separate suite lets integration checks run without touching a user's Rick.
@@ -376,11 +377,16 @@ struct Animation {
     /// Where they sat when it started. Only differs for transitions.
     let from: String
     let isTransition: Bool
+    /// A step the app plays on its way somewhere else (a hop, the headphones
+    /// going on). Kept out of the Pose menu.
+    let isInternal: Bool
 }
 
 struct SpriteSet {
     let pixelWidth: Int
     let pixelHeight: Int
+    /// Image rows below the ground line his feet stand on.
+    let baseline: Int
     let animations: [String: Animation]
     let menuIcon: NSImage?
 
@@ -416,11 +422,13 @@ struct SpriteSet {
                 next: spec["next"] as? String,
                 shades: shades,
                 from: spec["from"] as? String ?? shades,
-                isTransition: spec["transition"] as? Bool ?? false)
+                isTransition: spec["transition"] as? Bool ?? false,
+                isInternal: spec["internal"] as? Bool ?? false)
         }
 
         self.pixelWidth = width
         self.pixelHeight = height
+        self.baseline = root["baseline"] as? Int ?? 2
         self.animations = loaded
 
         if let icon = NSImage(contentsOf: framesDir.appendingPathComponent("menubar.png")) {
@@ -581,11 +589,15 @@ final class Bubble {
 
     var isVisible: Bool { window.isVisible }
 
+    private var size = NSSize.zero
+    private var pixel: Double = 2
+
     func show(
         _ text: String, over buddy: NSRect, pixel: Double, screen: NSScreen?,
         duration: Double? = nil
     ) {
         let pixel = min(pixel, 2)
+        self.pixel = pixel
         let savedSize = preferences.double(forKey: "buddyTextSize")
         let fontSize = savedSize > 0 ? max(13, min(22, savedSize)) : 15
         let font = NSFont(name: "Georgia", size: fontSize)
@@ -600,22 +612,9 @@ final class Bubble {
         let padX = pixel * 3
         let padY = pixel * 2
         let tail = pixel * BubbleView.tailDepth
-        let w = (textSize.width + padX * 2 + pixel * 2).rounded(.up)
-        let h = (textSize.height + padY * 2 + pixel * 2).rounded(.up) + tail
-
-        let area = (screen ?? NSScreen.main)?.visibleFrame
-            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let gap = pixel
-
-        // Prefer above him; flip below if there isn't room.
-        var tailDown = true
-        var y = buddy.maxY + gap
-        if y + h > area.maxY {
-            tailDown = false
-            y = buddy.minY - h - gap
-        }
-        var x = buddy.midX - w / 2
-        x = min(max(x, area.minX + 4), area.maxX - w - 4)
+        size = NSSize(
+            width: (textSize.width + padX * 2 + pixel * 2).rounded(.up),
+            height: (textSize.height + padY * 2 + pixel * 2).rounded(.up) + tail)
 
         view.text = text
         view.setAccessibilityElement(true)
@@ -623,11 +622,8 @@ final class Bubble {
         view.pixel = pixel
         view.font = font
         view.wrapWidth = Self.maxTextWidth
-        view.tailDown = tailDown
-        view.tailX = buddy.midX - x
         view.needsDisplay = true
-
-        window.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
+        place(over: buddy, screen: screen)
         window.orderFrontRegardless()
 
         hideWork?.cancel()
@@ -652,10 +648,261 @@ final class Bubble {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }
 
+    /// He moves now — riding a window, hopping to another — and the bubble
+    /// goes with him rather than being left talking to an empty spot.
+    func follow(_ buddy: NSRect, screen: NSScreen?) {
+        guard window.isVisible else { return }
+        place(over: buddy, screen: screen)
+    }
+
+    private func place(over buddy: NSRect, screen: NSScreen?) {
+        let (w, h) = (size.width, size.height)
+        let area = (screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let gap = pixel
+
+        // Prefer above him; flip below if there isn't room.
+        var tailDown = true
+        var y = buddy.maxY + gap
+        if y + h > area.maxY {
+            tailDown = false
+            y = buddy.minY - h - gap
+        }
+        var x = buddy.midX - w / 2
+        x = min(max(x, area.minX + 4), area.maxX - w - 4)
+
+        if view.tailDown != tailDown || view.tailX != buddy.midX - x {
+            view.tailDown = tailDown
+            view.tailX = buddy.midX - x
+            view.needsDisplay = true
+        }
+        window.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
+    }
+
     func hide() {
         hideWork?.cancel()
         hideWork = nil
         window.orderOut(nil)
+    }
+}
+
+// MARK: - Music
+
+/// Whether music is playing — Spotify, Apple Music, a YouTube tab, anything.
+///
+/// Two sources. Spotify and Apple Music announce play and pause to the whole
+/// system, instantly; for them that's the truth. Everything else comes from
+/// Core Audio's list of processes using the sound output, which needs no
+/// permission and carries nothing of the sound itself — only which apps are
+/// making some. That's checked once a second, and it takes a few seconds of
+/// steady output to count (a notification ding isn't music) and a few of quiet
+/// to stop. A call isn't music either: an app using the microphone too is
+/// talking, and the usual meeting apps are left out entirely.
+///
+/// Nothing about WHAT is playing is read or kept.
+final class MusicWatcher: NSObject {
+    var onChange: ((Bool) -> Void)?
+    private(set) var isPlaying = false
+
+    /// Players that announce themselves, by family, and their last word.
+    private var announced: [String: Bool] = [:]
+    /// Debounced Core Audio verdict for everyone else.
+    private var heard = false
+    private var disagreements = 0
+    private var lastLook = Date.distantPast
+    /// Each audio process's app. A process object keeps its id for life, so
+    /// this is asked once per process rather than every second.
+    private var families: [AudioObjectID: String] = [:]
+
+    private static let players = [
+        "com.spotify.client.PlaybackStateChanged": "com.spotify.client",
+        "com.apple.Music.playerInfo": "com.apple.Music",
+    ]
+    /// Apple's own processes make sound for all sorts of reasons (screen
+    /// mirroring, dictation, alerts); only these are listening material.
+    private static let appleListening: Set<String> = [
+        "com.apple.Music", "com.apple.podcasts", "com.apple.TV", "com.apple.Safari",
+        "com.apple.WebKit", "com.apple.QuickTimePlayerX", "com.apple.iTunes",
+    ]
+    /// Calls and meetings: never music, even with the microphone muted.
+    private static let talking: Set<String> = [
+        "us.zoom.xos", "com.microsoft.teams", "com.microsoft.teams2", "Cisco-Systems.Spark",
+        "com.cisco.webexmeetingsapp", "com.tinyspeck.slackmacgap", "com.hnc.Discord",
+        "net.whatsapp.WhatsApp", "com.skype.skype", "co.around.Around", "app.tuple.app",
+    ]
+
+    override init() {
+        super.init()
+        let center = DistributedNotificationCenter.default()
+        for name in Self.players.keys {
+            // deliverImmediately: AppKit suspends distributed notifications for
+            // an app that isn't active, and a menu bar buddy never is.
+            center.addObserver(
+                self, selector: #selector(playerChanged(_:)), name: Notification.Name(name),
+                object: nil, suspensionBehavior: .deliverImmediately)
+        }
+        // A player that quits mid-song says nothing on the way out.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(appQuit(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification, object: nil)
+    }
+
+    @objc private func playerChanged(_ note: Notification) {
+        guard let player = Self.players[note.name.rawValue] else { return }
+        announced[player] = note.userInfo?["Player State"] as? String == "Playing"
+        update()
+    }
+
+    @objc private func appQuit(_ note: Notification) {
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        if let id = app?.bundleIdentifier, announced[id] != nil {
+            announced[id] = false
+            update()
+        }
+    }
+
+    /// Once a second. Three seconds of sound to start, four of quiet to stop.
+    /// A full look costs a few milliseconds of round trips to Core Audio, so:
+    /// none at all while nothing is using the speakers, and once the answer
+    /// has held steady, every other second is plenty.
+    func poll() {
+        let now: Bool
+        if !Self.speakersInUse() {
+            now = false
+        } else if disagreements == 0, Date().timeIntervalSince(lastLook) < 1.9 {
+            now = heard
+        } else {
+            lastLook = Date()
+            now = !audibleFamilies().subtracting(announced.keys).isEmpty
+        }
+        disagreements = now == heard ? 0 : disagreements + 1
+        if disagreements >= (now ? 3 : 4) {
+            heard = now
+            disagreements = 0
+            update()
+        }
+    }
+
+    private func update() {
+        let playing = heard || announced.values.contains(true)
+        guard playing != isPlaying else { return }
+        isPlaying = playing
+        onChange?(playing)
+    }
+
+    /// `com.google.Chrome.helper` plays for `com.google.Chrome`.
+    private static func family(_ bundle: String) -> String {
+        bundle.split(separator: ".").prefix(3).joined(separator: ".")
+    }
+
+    private static func flag(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr && value != 0
+    }
+
+    /// Is anything at all playing through the default output? One cheap
+    /// question that rules out the full look most of the day.
+    static func speakersInUse() -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var device = AudioObjectID(0)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr
+        else { return true }  // can't tell: take the full look
+        return flag(device, kAudioDevicePropertyDeviceIsRunningSomewhere)
+    }
+
+    /// Apps with sound going out right now and no microphone in use.
+    private func audibleFamilies() -> Set<String> {
+        guard #available(macOS 14.2, *) else { return [] }
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var bytes: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &bytes) == noErr, bytes > 0
+        else { return [] }
+        var processes = [AudioObjectID](repeating: 0, count: Int(bytes) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(system, &address, 0, nil, &bytes, &processes) == noErr
+        else { return [] }
+        families = families.filter { processes.contains($0.key) }
+
+        func bundle(_ process: AudioObjectID) -> String? {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioProcessPropertyBundleID, mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            var value: Unmanaged<CFString>?
+            var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+            guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr,
+                let id = value?.takeRetainedValue() as String?, !id.isEmpty
+            else { return nil }
+            return id
+        }
+
+        func app(_ process: AudioObjectID) -> String? {
+            if let known = families[process] { return known.isEmpty ? nil : known }
+            let found = bundle(process).map(Self.family) ?? ""  // unnamed helpers: can't tell
+            families[process] = found
+            return found.isEmpty ? nil : found
+        }
+
+        let playing = Set(processes.filter { Self.flag($0, kAudioProcessPropertyIsRunningOutput) }
+            .compactMap(app))
+            .filter { !Self.talking.contains($0)
+                && (!$0.hasPrefix("com.apple.") || Self.appleListening.contains($0)) }
+        guard !playing.isEmpty else { return [] }
+        // Only the playing apps' processes need asking about the microphone.
+        let calling = Set(processes.filter { app($0).map(playing.contains) == true
+            && Self.flag($0, kAudioProcessPropertyIsRunningInput) }.compactMap(app))
+        return playing.subtracting(calling)
+    }
+}
+
+// MARK: - Windows to stand on
+
+/// The window he stands on: the frontmost app's frontmost ordinary window, in
+/// AppKit coordinates. Read from the window list, which gives bounds and owners
+/// without any permission — titles would need Screen Recording, and he never
+/// asks for them.
+enum PerchTarget {
+    /// One of his own windows is in front (the companion panel, a menu): stay put.
+    case keep
+    /// Nothing to stand on — the desktop, or an app with no windows open.
+    case none
+    case window(id: CGWindowID, frame: NSRect, app: String)
+
+    static func current() -> PerchTarget {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return .none }
+        let pid = app.processIdentifier
+        if pid == getpid() { return .keep }
+        guard
+            let list = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]]
+        else { return .none }
+        // The window list's origin is the top-left of the menu bar display.
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        for info in list {
+            guard (info[kCGWindowOwnerPID as String] as? Int).map({ pid_t($0) }) == pid,
+                (info[kCGWindowLayer as String] as? Int) == 0,
+                (info[kCGWindowAlpha as String] as? Double ?? 1) > 0.1,
+                let number = info[kCGWindowNumber as String] as? Int,
+                let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+                let rect = CGRect(dictionaryRepresentation: bounds),
+                rect.width >= 200, rect.height >= 120  // not a palette or a popover
+            else { continue }
+            return .window(
+                id: CGWindowID(number),
+                frame: NSRect(x: rect.minX, y: top - rect.maxY, width: rect.width, height: rect.height),
+                app: app.bundleIdentifier ?? "pid \(pid)")
+        }
+        return .none
     }
 }
 
@@ -736,6 +983,78 @@ final class Buddy: NSObject, NSMenuDelegate {
     private var fidgetUntil: Date?
     private var nextFidgetAt = Date.distantFuture
     private var lastFidget = ""
+
+    // Music. Headphones go on when anything plays music, and he grooves
+    // through the work — only Claude needing you takes them off.
+    private let music = MusicWatcher()
+    private static let grooveKey = "buddyGroove"
+    private var grooveEnabled: Bool { preferences.object(forKey: Self.grooveKey) as? Bool ?? true }
+    private var grooveWanted: Bool { grooveEnabled && music.isPlaying && !isFocusing && !isBreathing }
+    /// The headphones-on states. Leaving them always goes through "unphones".
+    private static let musicStates: Set<String> = [
+        "phones", "groove", "charge-phones", "flip-phones", "land-phones",
+    ]
+    /// When the music last stopped. Its return after a long silence earns a word.
+    private var musicStoppedAt = Date.distantPast
+
+    // Perching. He stands on the front window and hops when it changes.
+    private static let perchKey = "buddyPerch"
+    private static let perchSpotKey = "buddyPerchSpot"
+    private var perchEnabled: Bool { preferences.bool(forKey: Self.perchKey) }
+    /// How far along the window's edge he stands: 0 left, 1 right. Set by
+    /// dragging him along it.
+    private var perchSpot = preferences.object(forKey: "buddyPerchSpot") as? Double ?? 0.85
+    /// The window he's on; 0 is his home spot; nil means look again and hop.
+    private var perchedOn: CGWindowID?
+    private var perchFrame: NSRect?
+    private var perchApp: String?
+    /// Where you've put him inside each app's windows, as fractions of the
+    /// window (x from the left, y from the bottom). Wins over the top edge.
+    private static let appSpotsKey = "buddyAppSpots"
+    private var appSpots = preferences.dictionary(forKey: "buddyAppSpots") as? [String: [Double]] ?? [:]
+    /// The band at a window's top kept clear inside it: title bar and toolbar.
+    private static let toolbarBand = 92.0
+    /// A different window came to the front, and when. Hops wait a beat for it
+    /// to settle, so flicking through Cmd-Tab doesn't send him bouncing.
+    private var perchCandidate: (id: CGWindowID, since: Date)?
+    private var ticksSincePerchPoll = 0
+    /// Poll every tick until then: the window he's on is being dragged.
+    private var perchFastUntil = Date.distantPast
+    private var isDragging = false
+
+    private struct Hop {
+        let from: NSPoint
+        let to: NSPoint
+        /// Liftoff. Before it he's still in the crouch.
+        let start: Date
+        let duration: TimeInterval
+        let height: Double
+        /// A real jump. Otherwise he glides the same arc in whatever he's
+        /// doing: headphones on, seated, shades up.
+        let leaps: Bool
+        /// The full jump: charge, spin, land. Short hops skip the ceremony.
+        let charged: Bool
+        /// Whole turns of the tuck in the air, and which way he's travelling.
+        let spins: Int
+        let rightward: Bool
+        /// Headphones on: the jump in its headphones-on frames.
+        let phones: Bool
+        /// What to go back to after landing.
+        let resume: String?
+        var launched = false
+    }
+    /// One-shot effects left behind (the launch burst), held until they finish.
+    private var effects: [NSWindow] = []
+    private var hop: Hop?
+    /// A pose asked for mid-jump. It plays once he lands.
+    private var afterHop: String?
+    /// Poses he jumps from. Anything holding a prop or sitting glides instead.
+    private static let leapingPoses: Set<String> = [
+        "idle", "think", "stroke", "nod", "glance", "adjust", "glint", "land", "touchdown",
+        "groove", "land-phones",
+    ]
+    /// Shorter than this, a jump is a hop: no charge, no spin.
+    private static let chargedJumpFrom = 120.0
 
     /// Seconds you've spent actively at the machine since your last real break.
     private var activeSeconds: TimeInterval = 0
@@ -866,6 +1185,13 @@ final class Buddy: NSObject, NSMenuDelegate {
 
         super.init()
 
+        // Standing on windows is new. A fresh install starts with it; anyone who
+        // already put him somewhere keeps that spot until they choose it.
+        let returning = preferences.bool(forKey: "buddyHasRun")
+        if preferences.object(forKey: Self.perchKey) == nil {
+            preferences.set(!returning, forKey: Self.perchKey)
+        }
+
         if !Buddy.chatterFromLaunch,
             let stored = preferences.string(forKey: Self.chatterKey),
             let match = Self.chatterChoices.first(where: { $0.0 == stored })
@@ -892,9 +1218,15 @@ final class Buddy: NSObject, NSMenuDelegate {
 
         view.setAccessibilityElement(true)
         view.setAccessibilityLabel("Rick. Click for a thought; right-click for settings.")
-        view.onGrab = { [weak self] in self?.bubble.hide() }
+        view.onGrab = { [weak self] in
+            guard let self else { return }
+            self.bubble.hide()
+            self.isDragging = true
+            self.cancelHop()
+        }
         view.onClick = { [weak self] in
             guard let self else { return }
+            self.isDragging = false
             // Mid-breath, a click means "enough" — he stands, nothing more.
             if self.isBreathing {
                 self.cancelBreath(standUp: true)
@@ -902,15 +1234,24 @@ final class Buddy: NSObject, NSMenuDelegate {
             }
             if self.isFocusing { self.speakLine(); return }
             // Waiting on you, eyes on you: a nod would drop the shades and lose
-            // the waiting posture. He's already giving you his attention.
-            if self.currentAnimation == "look" {
+            // the waiting posture. He's already giving you his attention. And
+            // with the headphones on, a nod is what he's already doing.
+            if self.currentAnimation == "look" || Self.musicStates.contains(self.currentAnimation) {
                 self.speakLine()
                 return
             }
             self.request("nod")
             self.speakLine()
         }
-        view.onDragEnd = { [weak self] in self?.saveOrigin() }
+        view.onDragEnd = { [weak self] in
+            guard let self else { return }
+            self.isDragging = false
+            self.dropped()
+        }
+        music.onChange = { [weak self] playing in self?.musicChanged(playing) }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.ticksSincePerchPoll = 999 }  // look now, not in half a second
         view.onRightClick = { [weak self] event in
             guard let self else { return }
             NSMenu.popUpContextMenu(self.buildMenu(), with: event, for: self.view)
@@ -940,6 +1281,21 @@ final class Buddy: NSObject, NSMenuDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
                 guard let self, !self.inQuietHour, Buddy.quietSecondsRange != nil else { return }
                 self.say("A little company. Click my menu bar head for a breath, a thought, or a quiet sit.")
+            }
+        }
+
+        // Someone who's had him a while learns about the new tricks once, from
+        // him, a little after launch — not from a changelog they'll never read.
+        if !preferences.bool(forKey: "buddyNews3") {
+            preferences.set(true, forKey: "buddyNews3")
+            if returning {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+                    guard let self, !self.isBreathing, !self.bubble.isVisible, !self.inQuietHour,
+                        Buddy.quietSecondsRange != nil else { return }
+                    self.say(self.perchEnabled
+                        ? "New: headphones on when your music plays."
+                        : "New: headphones when your music plays, and I can stand on your windows. It’s in Settings.")
+                }
             }
         }
 
@@ -1087,6 +1443,11 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// routes into and out of sitting through sitdown/standup.
     private func request(_ name: String) {
         guard let target = sprites.animations[name] else { return }
+        // Mid-jump the body is busy. Whatever was asked for plays on landing.
+        if hop?.leaps == true {
+            afterHop = name
+            return
+        }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             var resting = name
             var visited = Set<String>()
@@ -1097,6 +1458,17 @@ final class Buddy: NSObject, NSMenuDelegate {
             play(resting)
             return
         }
+
+        // The headphones come off before he does anything else, the same way
+        // standup comes before anything that isn't sitting.
+        if Self.musicStates.contains(currentAnimation), !Self.musicStates.contains(name),
+            name != "unphones"
+        {
+            pendingTarget = name == "idle" ? nil : name  // unphones resolves to idle itself
+            play("unphones")
+            return
+        }
+        if currentAnimation == "phones", name == "groove" { return }  // already on the way
 
         // Leaving the floor: anything that isn't sitting goes through standup.
         if Self.sittingStates.contains(currentAnimation), !Self.sittingStates.contains(name),
@@ -1137,8 +1509,23 @@ final class Buddy: NSObject, NSMenuDelegate {
             return
         }
 
+        // Standing, shades down: now the headphones can go on — unless they
+        // already are (landing a jump with them on).
+        if name == "groove", !Self.musicStates.contains(currentAnimation) {
+            pendingTarget = nil
+            play("phones")
+            return
+        }
+
         pendingTarget = nil
         play(name)
+    }
+
+    /// Music changes the meaning of "nothing much is happening": with it
+    /// playing, rest is the groove, and so is Claude working or finishing —
+    /// that's in the menu bar. Claude needing you still takes the headphones off.
+    private func withMusic(_ pose: String) -> String {
+        grooveWanted && ["idle", "think", "stroke", "nod"].contains(pose) ? "groove" : pose
     }
 
     private func play(_ name: String) {
@@ -1184,6 +1571,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             pollFocus()
             refreshPanel()
             pollPresence()
+            music.poll()
         }
 
         // Idle fidgets. A gesture ends by returning to idle; a state event that
@@ -1194,7 +1582,7 @@ final class Buddy: NSObject, NSMenuDelegate {
                 // Only reel him back in if he's still doing the fidget. If a
                 // breath, a Pose pick, or anything else took over meanwhile,
                 // this timer has no business standing him back up.
-                if ["stroke", "think", "glasses", "look", "glance", "adjust", "stretch", "tea"]
+                if ["stroke", "think", "glasses", "look", "glance", "adjust", "stretch", "tea", "glint"]
                     .contains(currentAnimation)
                 {
                     request("idle")
@@ -1205,7 +1593,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             // Never the same gesture twice running — uniform draws clump, and
             // clumping is what reads as "he only ever does one thing."
-            let pool = ["stroke", "think", "glasses", "glance", "adjust", "stretch", "tea"]
+            let pool = ["stroke", "think", "glasses", "glance", "adjust", "stretch", "tea", "glint"]
                 .filter { $0 != lastFidget }
             if let gesture = pool.randomElement() {
                 lastFidget = gesture
@@ -1213,6 +1601,17 @@ final class Buddy: NSObject, NSMenuDelegate {
                 request(gesture)
             }
         }
+
+        // Standing on windows: a look at the window list (about a millisecond)
+        // twice a second, at once when you switch apps, five times a second
+        // while a new window settles, and every tick while one is moving.
+        ticksSincePerchPoll += 1
+        let following = Date() < perchFastUntil || NSEvent.pressedMouseButtons & 1 != 0
+        if perchEnabled, ticksSincePerchPoll >= (following ? 1 : perchCandidate != nil ? 6 : 15) {
+            ticksSincePerchPoll = 0
+            updatePerch()
+        }
+        stepHop()
 
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               let animation, !animation.frames.isEmpty else { return }
@@ -1231,11 +1630,299 @@ final class Buddy: NSObject, NSMenuDelegate {
                 return
             }
             if let next = animation.next {
-                play(next)
+                // A gesture finishing while the music plays settles back into
+                // the groove, not into standing still.
+                if next == "idle", grooveWanted { request("groove") } else { play(next) }
                 return
             }
         }
         renderCurrentFrame()
+    }
+
+    // MARK: music
+
+    private func musicChanged(_ playing: Bool) {
+        log("music \(playing ? "playing" : "stopped")")
+        let now = Date()
+        guard playing else {
+            musicStoppedAt = now
+            if afterHop == "groove" { afterHop = nil }  // started and stopped mid-jump
+            if Self.musicStates.contains(currentAnimation) || pendingTarget == "groove" {
+                restoreAgentPose()
+            }
+            return
+        }
+        guard grooveEnabled, !isFocusing, !isBreathing else { return }
+        // Claude needing you outranks the music; the groove starts once you've answered.
+        guard !["glasses", "look"].contains(currentAnimation) else { return }
+        cancelFidget()
+        sitReason = nil
+        request("groove")
+        // Music back after a long silence: sometimes, a word about listening.
+        if now.timeIntervalSince(musicStoppedAt) >= 30 * 60, Bool.random() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self, self.canSpeakContextual(Date()) else { return }
+                self.speakContextual(["listening"], at: Date())
+            }
+        }
+    }
+
+    @objc private func toggleGroove() {
+        preferences.set(!grooveEnabled, forKey: Self.grooveKey)
+        if grooveEnabled { musicChanged(music.isPlaying) }
+        else if Self.musicStates.contains(currentAnimation) { restoreAgentPose() }
+    }
+
+    // MARK: perching
+
+    /// Where he stands on a window. On its top edge when there's headroom under
+    /// the menu bar, `perchSpot` of the way along, clear of the rounded
+    /// corners. A maximized window has none, so he goes inside it — to the
+    /// top-right corner under the toolbar by default, well away from the
+    /// bottom where you type, or wherever you last put him in that app.
+    private func perchOrigin(on frame: NSRect, app: String) -> NSPoint? {
+        let size = spriteSize()
+        let corner = 30.0
+        guard frame.width - corner * 2 > size.width else { return nil }
+        let below = Double(sprites.baseline) * pixel
+        let area = NSScreen.screens
+            .first { $0.frame.contains(NSPoint(x: frame.midX, y: frame.maxY - 1)) }?.visibleFrame
+        func onScreen(_ p: NSPoint) -> NSPoint {
+            guard let area else { return p }
+            return NSPoint(
+                x: min(max(p.x, area.minX), area.maxX - size.width).rounded(),
+                y: min(max(p.y, area.minY - below), area.maxY - size.height).rounded())
+        }
+
+        let onTop = frame.maxY - below
+        if appSpots[app] == nil, let area, onTop + size.height <= area.maxY {
+            let left = frame.minX + corner
+            let right = frame.maxX - corner - size.width
+            return onScreen(NSPoint(x: left + (right - left) * perchSpot, y: onTop))
+        }
+        let inside = insideRange(of: frame)
+        let spot = appSpots[app] ?? [1, 1]
+        return onScreen(NSPoint(
+            x: inside.minX + inside.width * spot[0],
+            y: inside.minY + inside.height * spot[1]))
+    }
+
+    /// The origins he can take inside a window: a margin all round, and the
+    /// toolbar band at the top left clear.
+    private func insideRange(of frame: NSRect) -> NSRect {
+        let size = spriteSize()
+        let margin = 16.0
+        return NSRect(
+            x: frame.minX + margin, y: frame.minY + margin,
+            width: max(0, frame.width - margin * 2 - size.width),
+            height: max(0, frame.height - margin - Self.toolbarBand - size.height))
+    }
+
+    private func updatePerch() {
+        guard window.isVisible, !isDragging, hop == nil else { return }
+        let id: CGWindowID
+        let spot: NSPoint
+        switch PerchTarget.current() {
+        case .keep:
+            return
+        case .none:
+            id = 0
+            spot = savedOrigin(size: spriteSize())
+            perchFrame = nil
+            perchApp = nil
+        case .window(let windowID, let frame, let app):
+            guard let origin = perchOrigin(on: frame, app: app) else { return }
+            id = windowID
+            spot = origin
+            perchFrame = frame
+            perchApp = app
+        }
+
+        if id == perchedOn {
+            perchCandidate = nil
+            // Same window, moved or resized under him: ride along, no jump.
+            if window.frame.origin != spot {
+                perchFastUntil = Date().addingTimeInterval(0.6)
+                move(to: spot)
+            }
+            return
+        }
+        // A different window. Give it a beat to settle before jumping.
+        if perchCandidate?.id != id {
+            perchCandidate = (id, Date())
+            return
+        }
+        guard let since = perchCandidate?.since, Date().timeIntervalSince(since) >= 0.25 else { return }
+        perchCandidate = nil
+        perchedOn = id
+        jump(to: spot)
+    }
+
+    private func move(to point: NSPoint) {
+        window.setFrameOrigin(point)
+        bubble.follow(window.frame, screen: window.screen)
+    }
+
+    /// A ballistic arc from here to there: linear across, a parabola up and
+    /// down. Longer jumps take longer and go higher, within limits. A real
+    /// jump charges up first and spins in the air; a short one just hops.
+    private func jump(to point: NSPoint) {
+        let from = window.frame.origin
+        let distance = hypot(point.x - from.x, point.y - from.y)
+        guard distance >= 8,  // a nudge, not a journey
+            window.isVisible, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else {
+            move(to: point)
+            return
+        }
+        // With the headphones on there's only the full jump; a short way, he glides.
+        let phones = Self.musicStates.contains(currentAnimation)
+        let leaps = Self.leapingPoses.contains(currentAnimation) && !isBreathing && !isFocusing
+            && (!phones || distance >= Self.chargedJumpFrom)
+        let charged = leaps && distance >= Self.chargedJumpFrom
+        log("\(charged ? "jump" : leaps ? "hop" : "glide") from \(from) to \(point) [\(currentAnimation)]")
+        // The charge runs to its glint; the last frame is held until liftoff.
+        let chargeTicks = (sprites.animations["charge"]?.frames.dropLast().reduce(0) { $0 + $1.hold } ?? 0) + 2
+        let windUp = charged ? Double(chargeTicks) / 30 : leaps ? 4.0 / 30 : 0
+        let duration = charged ? min(1.0, 0.5 + distance / 2200) : min(0.6, 0.3 + distance / 1500)
+        let loops = sprites.animations[currentAnimation]?.next == nil
+        hop = Hop(
+            from: from, to: point, start: Date().addingTimeInterval(windUp),
+            duration: duration,
+            height: charged ? min(170, 60 + distance * 0.15) : min(150, 24 + distance * 0.14),
+            leaps: leaps, charged: charged,
+            spins: max(1, Int((duration / 0.45).rounded())),
+            rightward: point.x >= from.x,
+            phones: phones,
+            resume: leaps && loops && currentAnimation != "idle" ? currentAnimation : nil)
+        if leaps {
+            // Straight to the jump: nothing should bridge into it. Anything
+            // already queued waits for the landing.
+            afterHop = pendingTarget
+            pendingTarget = nil
+            play(charged ? (phones ? "charge-phones" : "charge") : "leap")
+        }
+    }
+
+    private func stepHop() {
+        guard var jump = hop else { return }
+        let t = Date().timeIntervalSince(jump.start) / jump.duration
+        guard t >= 0 else { return }  // still winding up
+        if !jump.launched {
+            jump.launched = true
+            hop = jump
+            if jump.charged { leaveBurst(at: window.frame) }
+        }
+        guard t < 1 else {
+            hop = nil
+            move(to: jump.to)
+            let next = afterHop ?? jump.resume
+            afterHop = nil
+            if jump.leaps {
+                play(jump.charged ? (jump.phones ? "land-phones" : "land") : "touchdown")
+                pendingTarget = next  // the landing first, then this
+            } else if let next {
+                request(next)
+            }
+            return
+        }
+        if jump.charged {
+            // Up with his arms raised, then tucked and turning a quarter at a
+            // time — forward, in the direction of travel — upright as he lands.
+            let quarters = jump.spins * 4
+            let spin = min(quarters, Int((t - 0.12) / 0.88 * Double(quarters + 1)))
+            let turn = jump.rightward ? spin % 4 : (4 - spin % 4) % 4
+            show(jump.phones ? "flip-phones" : "flip", frame: t < 0.12 ? 0 : 1 + turn)
+        }
+        move(to: NSPoint(
+            x: (jump.from.x + (jump.to.x - jump.from.x) * t).rounded(),
+            y: (jump.from.y + (jump.to.y - jump.from.y) * t + jump.height * 4 * t * (1 - t)).rounded()))
+    }
+
+    /// Hold a particular frame, for motion the app drives itself.
+    private func show(_ name: String, frame: Int) {
+        guard let animation = sprites.animations[name], animation.frames.indices.contains(frame),
+            currentAnimation != name || frameIndex != frame
+        else { return }
+        currentAnimation = name
+        frameIndex = frame
+        ticksOnFrame = 0
+        renderCurrentFrame()
+    }
+
+    /// A burst of sparks and dust where he took off, in a window of its own
+    /// that plays once and goes.
+    private func leaveBurst(at rect: NSRect) {
+        guard let frames = sprites.animations["puff"]?.frames, !frames.isEmpty else { return }
+        let effect = NSWindow(contentRect: rect, styleMask: .borderless, backing: .buffered, defer: false)
+        effect.isOpaque = false
+        effect.backgroundColor = .clear
+        effect.hasShadow = false
+        effect.level = .floating
+        effect.ignoresMouseEvents = true
+        effect.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        let view = SpriteView(frame: NSRect(origin: .zero, size: rect.size))
+        effect.contentView = view
+        effects.append(effect)
+        var at = 0.0
+        for frame in frames {
+            DispatchQueue.main.asyncAfter(deadline: .now() + at) {
+                view.image = frame.image
+                view.needsDisplay = true
+                effect.orderFrontRegardless()
+            }
+            at += Double(frame.hold) / 30
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + at) { [weak self] in
+            effect.orderOut(nil)
+            self?.effects.removeAll { $0 === effect }
+        }
+    }
+
+    /// Picked up mid-jump: drop the jump where he is, back on his feet.
+    private func cancelHop() {
+        guard let jump = hop else { return }
+        hop = nil
+        let next = afterHop ?? jump.resume
+        afterHop = nil
+        if jump.leaps { request(withMusic(next ?? "idle")) }
+    }
+
+    /// Let go after a drag. Standing on windows: dropped on a window's top
+    /// edge, he stands on top of that app's windows, at that point along the
+    /// edge; dropped inside a window, that spot is his in that app. Otherwise
+    /// it's his new spot on the desktop.
+    private func dropped() {
+        guard perchEnabled, perchedOn != 0, let frame = perchFrame, let app = perchApp else {
+            saveOrigin()
+            return
+        }
+        let me = window.frame
+        let feet = me.minY + Double(sprites.baseline) * pixel
+        let corner = 30.0
+        if abs(feet - frame.maxY) < 40, me.midX > frame.minX, me.midX < frame.maxX {
+            let span = frame.width - corner * 2 - me.width
+            if span > 0 {
+                perchSpot = min(1, max(0, (me.minX - frame.minX - corner) / span))
+                preferences.set(perchSpot, forKey: Self.perchSpotKey)
+            }
+            appSpots[app] = nil
+        } else if frame.contains(NSPoint(x: me.midX, y: me.midY)) {
+            let inside = insideRange(of: frame)
+            appSpots[app] = [
+                inside.width > 0 ? min(1, max(0, (me.minX - inside.minX) / inside.width)) : 1,
+                inside.height > 0 ? min(1, max(0, (me.minY - inside.minY) / inside.height)) : 1,
+            ]
+        }
+        preferences.set(appSpots, forKey: Self.appSpotsKey)
+        perchedOn = nil  // look again, and go to it
+    }
+
+    @objc private func togglePerch() {
+        preferences.set(!perchEnabled, forKey: Self.perchKey)
+        perchedOn = nil
+        perchCandidate = nil
+        if !perchEnabled { jump(to: savedOrigin(size: spriteSize())) }
     }
 
     private func renderCurrentFrame() {
@@ -1288,11 +1975,12 @@ final class Buddy: NSObject, NSMenuDelegate {
         // Seated for a long run: more of the same work is not a reason to stand.
         // Anything that ISN'T the same work (nod, glasses, idle) still is.
         if sitReason == "long", ["think", "stroke"].contains(name) { return }
+        let pose = withMusic(name)
         // Re-triggering what's already playing would just make it stutter — and
         // a repeat that matches the pending target would hard-cut the bridge
         // that's currently carrying him there.
-        guard name != currentAnimation, name != pendingTarget else { return }
-        request(name)
+        guard pose != currentAnimation, pose != pendingTarget, pose != afterHop else { return }
+        request(pose)
     }
 
     /// Contextual bookkeeping, run on every state-file event (even repeats).
@@ -1813,13 +2501,14 @@ final class Buddy: NSObject, NSMenuDelegate {
         lastSessionEvent = signature
         guard let first = sessions.first else {
             waitingSince = nil; busySince = nil
-            if !isFocusing && !isBreathing { request("idle") }
+            if !isFocusing && !isBreathing { request(withMusic("idle")) }
             return
         }
-        let pose = agentPose(first)
-        noteStateEvent(pose)
+        let event = agentPose(first)
+        noteStateEvent(event)
         guard !isFocusing, !isBreathing else { return }
-        if pose != currentAnimation && pose != pendingTarget { request(pose) }
+        let pose = withMusic(event)
+        if pose != currentAnimation && pose != pendingTarget && pose != afterHop { request(pose) }
     }
 
     private func agentPose(_ session: AgentSession) -> String {
@@ -1833,7 +2522,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private func restoreAgentPose() {
         if isFocusing { request("meditate") }
-        else { request(sessions.first.map(agentPose) ?? "idle") }
+        else { request(withMusic(sessions.first.map(agentPose) ?? "idle")) }
     }
 
     @objc private func openCompanion() {
@@ -2123,6 +2812,8 @@ final class Buddy: NSObject, NSMenuDelegate {
         menu.addItem(
             item(window.isVisible ? "Hide Rick" : "Show Rick", #selector(toggleVisible)))
         menu.addItem(item("Bring Him Back", #selector(bringBackAndShow)))
+        menu.addItem(item("Stand on Your Window", #selector(togglePerch), on: perchEnabled))
+        menu.addItem(item("Headphones with Music", #selector(toggleGroove), on: grooveEnabled))
         menu.addItem(.separator())
 
         let sizeMenu = NSMenu()
@@ -2164,7 +2855,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
 
         let poseMenu = NSMenu()
-        for name in sprites.animations.keys.sorted() {
+        for name in sprites.animations.keys.sorted() where sprites.animations[name]?.isInternal != true {
             let entry = item(
                 name.capitalized, #selector(selectAnimation(_:)), on: name == currentAnimation)
             entry.representedObject = name
@@ -2247,6 +2938,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private func bringBack(persist: Bool) {
         bubble.hide()
+        perchedOn = nil  // standing on windows, he finds his window again from here
         window.setFrameOrigin(defaultOrigin(size: spriteSize()))
         if persist { saveOrigin() }
     }
@@ -2381,7 +3073,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     }
 
     @objc private func quit() {
-        saveOrigin()
+        if !perchEnabled { saveOrigin() }  // a window's edge isn't his spot
         NSApp.terminate(nil)
     }
 }
