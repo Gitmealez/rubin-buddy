@@ -15,10 +15,11 @@ if [ "$word" = "event" ]; then
     exit 0
 fi
 # "say" borrows his voice: `state.sh say Deploy is green.` puts the rest of the
-# arguments in his speech bubble, once. The buddy caps the length.
-if [ "$word" = "say" ] && [ "$#" -gt 1 ]; then
+# arguments in his speech bubble, once. The buddy caps the length. "fling"
+# takes a speed to throw him at: `state.sh fling 1400 900`.
+if { [ "$word" = "say" ] || [ "$word" = "fling" ]; } && [ "$#" -gt 1 ]; then
     shift
-    word="say $*"
+    word="$word $*"
 fi
 # Per-process temp name: parallel Claude Code sessions all run these hooks, and
 # a shared temp path let concurrent writers interleave and lose events.

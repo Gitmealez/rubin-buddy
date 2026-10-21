@@ -13,6 +13,8 @@
 import AppKit
 import CoreAudio
 import Darwin
+import ImageIO
+import UniformTypeIdentifiers
 
 // A separate suite lets integration checks run without touching a user's Rick.
 let appDirectory = Bundle.main.bundleURL.pathExtension == "app"
@@ -29,6 +31,10 @@ struct AgentSession: Codable {
     let updated: Double
     let event: String
     let provider: String?
+    /// When a command last failed in this session, and when one last worked
+    /// after failing — written by session-event.py.
+    var failedAt: Double? = nil
+    var recoveredAt: Double? = nil
     var agentName: String { provider == "codex" ? "Codex" : "Claude" }
 
     func effectivePhase(at now: Double) -> String {
@@ -93,8 +99,9 @@ final class CompanionPanel: NSViewController {
         let sprite = NSImageView()
         sprite.image = icon
         sprite.imageScaling = .scaleProportionallyUpOrDown
+        let aspect = icon.map { $0.size.height / max(1, $0.size.width) } ?? (51.0 / 39.0)
         sprite.widthAnchor.constraint(equalToConstant: 39).isActive = true
-        sprite.heightAnchor.constraint(equalToConstant: 51).isActive = true
+        sprite.heightAnchor.constraint(equalToConstant: 39 * aspect).isActive = true
         let top = NSStackView(views: [sprite, heading])
         top.spacing = 14
         stack.addArrangedSubview(top)
@@ -366,6 +373,12 @@ enum LoginItem {
 struct Frame {
     let image: NSImage
     let hold: Int
+    /// The same frame wearing each seasonal outfit, where his dome shows.
+    let outfits: [String: NSImage]
+
+    func image(wearing outfit: String?) -> NSImage {
+        outfit.flatMap { outfits[$0] } ?? image
+    }
 }
 
 struct Animation {
@@ -387,6 +400,8 @@ struct SpriteSet {
     let pixelHeight: Int
     /// Image rows below the ground line his feet stand on.
     let baseline: Int
+    /// Image rows above his head kept clear for marks and hats.
+    let headroom: Int
     let animations: [String: Animation]
     let menuIcon: NSImage?
 
@@ -414,7 +429,11 @@ struct SpriteSet {
                     let hold = entry["hold"] as? Int,
                     let image = NSImage(contentsOf: framesDir.appendingPathComponent(file))
                 else { throw fail("\(name): bad frame") }
-                return Frame(image: image, hold: hold)
+                var outfits: [String: NSImage] = [:]
+                for (outfit, file) in entry["outfits"] as? [String: String] ?? [:] {
+                    outfits[outfit] = NSImage(contentsOf: framesDir.appendingPathComponent(file))
+                }
+                return Frame(image: image, hold: hold, outfits: outfits)
             }
             let shades = spec["shades"] as? String ?? "down"
             loaded[name] = Animation(
@@ -429,6 +448,7 @@ struct SpriteSet {
         self.pixelWidth = width
         self.pixelHeight = height
         self.baseline = root["baseline"] as? Int ?? 2
+        self.headroom = root["headroom"] as? Int ?? 1
         self.animations = loaded
 
         if let icon = NSImage(contentsOf: framesDir.appendingPathComponent("menubar.png")) {
@@ -453,29 +473,58 @@ final class SpriteView: NSView {
     var image: NSImage?
     var onClick: (() -> Void)?
     var onGrab: (() -> Void)?
-    var onDragEnd: (() -> Void)?
+    /// The press became a drag: he's been picked up.
+    var onDragStart: (() -> Void)?
+    /// Let go after a drag, with how fast he was moving (points per second).
+    var onDragEnd: ((CGVector) -> Void)?
     var onRightClick: ((NSEvent) -> Void)?
+    /// Facing left: the profile frames are drawn facing right.
+    var mirrored = false
+    /// 0...1: a Claude-orange glow round his outline while Claude works.
+    var glow: CGFloat = 0
+    /// The glow's softness, in points; set from his pixel size.
+    var glowRadius: CGFloat = 5
 
     private var grabOffset: NSPoint = .zero
     private var didDrag = false
+    /// The last few drag positions, for the speed of a throw.
+    private var trail: [(at: TimeInterval, point: NSPoint)] = []
+
+    static let glowColor = NSColor(srgbRed: 0.91, green: 0.48, blue: 0.32, alpha: 1)
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let image else { return }
+        guard let image, let context = NSGraphicsContext.current else { return }
+        context.saveGraphicsState()
+        if mirrored {
+            let flip = NSAffineTransform()
+            flip.translateX(by: bounds.width, yBy: 0)
+            flip.scaleX(by: -1, yBy: 1)
+            flip.concat()
+        }
+        if glow > 0 {
+            let shadow = NSShadow()
+            shadow.shadowColor = Self.glowColor.withAlphaComponent(glow)
+            shadow.shadowBlurRadius = glowRadius
+            shadow.shadowOffset = .zero
+            shadow.set()
+        }
         // Nearest-neighbour, or the pixel art turns to mush when scaled up.
         image.draw(
             in: bounds, from: .zero, operation: .sourceOver, fraction: 1.0,
             respectFlipped: true, hints: [.interpolation: NSImageInterpolation.none.rawValue])
+        context.restoreGraphicsState()
     }
 
     override func mouseDown(with event: NSEvent) {
         grabOffset = event.locationInWindow
         didDrag = false
+        trail = [(event.timestamp, NSEvent.mouseLocation)]
         onGrab?()
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let window else { return }
-        didDrag = true
+        if !didDrag { didDrag = true; onDragStart?() }
         let cursor = NSEvent.mouseLocation
         let proposed = NSPoint(x: cursor.x - grabOffset.x, y: cursor.y - grabOffset.y)
         // Refuse a move that would put him entirely off every display. Crossing
@@ -483,10 +532,22 @@ final class SpriteView: NSView {
         let frame = NSRect(origin: proposed, size: window.frame.size)
         guard NSScreen.screens.contains(where: { $0.frame.intersects(frame) }) else { return }
         window.setFrameOrigin(proposed)
+        trail.append((event.timestamp, cursor))
+        trail.removeAll { event.timestamp - $0.at > 0.1 }
     }
 
     override func mouseUp(with event: NSEvent) {
-        if didDrag { onDragEnd?() } else { onClick?() }
+        guard didDrag else { return onClick?() ?? () }
+        // Speed over the last tenth of a second. A drag that stopped before
+        // letting go reads as a drop, not a throw.
+        var velocity = CGVector.zero
+        if let first = trail.first, let last = trail.last,
+            event.timestamp - last.at < 0.06, last.at - first.at > 0.01
+        {
+            let span = last.at - first.at
+            velocity = CGVector(dx: (last.point.x - first.point.x) / span, dy: (last.point.y - first.point.y) / span)
+        }
+        onDragEnd?(velocity)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -730,6 +791,32 @@ final class MusicWatcher: NSObject {
         "com.cisco.webexmeetingsapp", "com.tinyspeck.slackmacgap", "com.hnc.Discord",
         "net.whatsapp.WhatsApp", "com.skype.skype", "co.around.Around", "app.tuple.app",
     ]
+    /// Apps that keep a sound channel open when silent — dictation tools that
+    /// chime — don't count unless you tick them back in under Music From.
+    private static let ignoredByDefault: Set<String> = [
+        "com.electron.wispr-flow", "com.superduper.superwhisper", "com.goodsnooze.MacWhisper",
+    ]
+    private static let ignoredKey = "buddyIgnoredAudio"
+    private static let countedKey = "buddyCountedAudio"
+    /// What you've said about particular apps: ignore this one, count that one.
+    var ignored: Set<String> {
+        Set(preferences.stringArray(forKey: Self.ignoredKey) ?? [])
+            .union(Self.ignoredByDefault.subtracting(preferences.stringArray(forKey: Self.countedKey) ?? []))
+    }
+    /// The apps making sound at the last look, ignored ones included — for the menu.
+    private(set) var heardApps: Set<String> = []
+
+    func setCounts(_ app: String, _ counts: Bool) {
+        var ignore = Set(preferences.stringArray(forKey: Self.ignoredKey) ?? [])
+        var count = Set(preferences.stringArray(forKey: Self.countedKey) ?? [])
+        if counts { ignore.remove(app); count.insert(app) } else { ignore.insert(app); count.remove(app) }
+        preferences.set(Array(ignore), forKey: Self.ignoredKey)
+        preferences.set(Array(count), forKey: Self.countedKey)
+        disagreements = 0
+        lastLook = .distantPast  // look again at the next poll
+        heard = !audibleFamilies().subtracting(announced.keys).isEmpty
+        update()
+    }
 
     override init() {
         super.init()
@@ -749,6 +836,9 @@ final class MusicWatcher: NSObject {
 
     @objc private func playerChanged(_ note: Notification) {
         guard let player = Self.players[note.name.rawValue] else { return }
+        if Buddy.debug {
+            FileHandle.standardError.write("player \(player): \(note.userInfo?["Player State"] ?? "?")\n".data(using: .utf8)!)
+        }
         announced[player] = note.userInfo?["Player State"] as? String == "Playing"
         update()
     }
@@ -769,11 +859,16 @@ final class MusicWatcher: NSObject {
         let now: Bool
         if !Self.speakersInUse() {
             now = false
+            heardApps = []
         } else if disagreements == 0, Date().timeIntervalSince(lastLook) < 1.9 {
             now = heard
         } else {
             lastLook = Date()
-            now = !audibleFamilies().subtracting(announced.keys).isEmpty
+            let audible = audibleFamilies().subtracting(announced.keys)
+            now = !audible.isEmpty
+            if Buddy.debug, now != heard {
+                FileHandle.standardError.write("audio: \(audible.sorted()) announced: \(announced)\n".data(using: .utf8)!)
+            }
         }
         disagreements = now == heard ? 0 : disagreements + 1
         if disagreements >= (now ? 3 : 4) {
@@ -856,11 +951,12 @@ final class MusicWatcher: NSObject {
             .compactMap(app))
             .filter { !Self.talking.contains($0)
                 && (!$0.hasPrefix("com.apple.") || Self.appleListening.contains($0)) }
-        guard !playing.isEmpty else { return [] }
+        guard !playing.isEmpty else { heardApps = []; return [] }
         // Only the playing apps' processes need asking about the microphone.
         let calling = Set(processes.filter { app($0).map(playing.contains) == true
             && Self.flag($0, kAudioProcessPropertyIsRunningInput) }.compactMap(app))
-        return playing.subtracting(calling)
+        heardApps = playing.subtracting(calling)
+        return heardApps.subtracting(ignored)
     }
 }
 
@@ -871,16 +967,23 @@ final class MusicWatcher: NSObject {
 /// without any permission — titles would need Screen Recording, and he never
 /// asks for them.
 enum PerchTarget {
-    /// One of his own windows is in front (the companion panel, a menu): stay put.
+    /// He's in front and there's no app before him to go by: stay put.
     case keep
     /// Nothing to stand on — the desktop, or an app with no windows open.
     case none
     case window(id: CGWindowID, frame: NSRect, app: String)
 
+    /// The last app other than him to come to the front. Clicking or dragging
+    /// him makes him the front app; he goes by where you were before that.
+    static var lastOtherApp: NSRunningApplication?
+
     static func current() -> PerchTarget {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return .none }
+        guard var app = NSWorkspace.shared.frontmostApplication else { return .none }
+        if app.processIdentifier == getpid() {
+            guard let before = lastOtherApp, !before.isTerminated else { return .keep }
+            app = before
+        }
         let pid = app.processIdentifier
-        if pid == getpid() { return .keep }
         guard
             let list = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
@@ -992,7 +1095,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     private var grooveWanted: Bool { grooveEnabled && music.isPlaying && !isFocusing && !isBreathing }
     /// The headphones-on states. Leaving them always goes through "unphones".
     private static let musicStates: Set<String> = [
-        "phones", "groove", "charge-phones", "flip-phones", "land-phones",
+        "phones", "groove", "charge-phones", "flip-phones", "land-phones", "feel", "fingerup", "sway",
     ]
     /// When the music last stopped. Its return after a long silence earns a word.
     private var musicStoppedAt = Date.distantPast
@@ -1045,13 +1148,74 @@ final class Buddy: NSObject, NSMenuDelegate {
     }
     /// One-shot effects left behind (the launch burst), held until they finish.
     private var effects: [NSWindow] = []
+
+    // Strolls: now and then, in the quiet, he walks a little way along the
+    // edge he's on, looks around, and walks back to his spot.
+    private struct Stroll {
+        var target: Double
+        var returning = false
+        var pauseUntil: Date?
+    }
+    private var stroll: Stroll?
+    /// How far he's walked from his spot; added to wherever his spot is.
+    private var strollOffset = 0.0
+    /// His spot before any stroll, as the last perch look placed it.
+    private var perchBase: NSPoint?
+    private var strollHome = NSPoint.zero
+
+    // Thrown: a little physics until he lands on something.
+    private struct Fling {
+        var position: NSPoint
+        var velocity: CGVector
+        var spin = 0.0
+        var last = Date()
+        let started = Date()
+        let phones: Bool
+    }
+    private var fling: Fling?
+    private var heldWithPhones = false
+    /// After a landing, give it a moment before he goes back to his spot.
+    private var perchPauseUntil = Date.distantPast
+
+    // Reactions to how Claude's work goes, per session: the failure and the
+    // recovery each session last reported, so each is reacted to once.
+    private var seenTurns: [String: (failed: Double, recovered: Double)] = [:]
+    private var lastWince = Date.distantPast
+    private var lastPump = Date.distantPast
+    /// The run that just finished was a long one: it ends with "proud".
+    private var lastRunWasLong = false
+    /// Any session working right now: he glows.
+    private var claudeWorking = false
+    private var ticksSinceGlow = 0
+
+    // Moments in the groove, every minute or so.
+    private var nextMomentAt = Date.distantFuture
+    private var lastMoment = ""
+    private var minuteTicks = 0
+
+    // The candle for a quiet sit, in a child window beside him.
+    private var candleWindow: NSWindow?
+    private let candleView = SpriteView(frame: .zero)
+    private var candleFrame = 0
+    private var candleTicks = 0
+
+    // Seasonal outfits: "seasonal" follows the calendar; or always one; or none.
+    private static let outfitKey = "buddyOutfit"
+    private static let outfitNames: [(String, String)] = [
+        ("witch", "Witch Hat"), ("santa", "Santa Hat"), ("beanie", "Beanie"), ("party", "Party Hat"),
+    ]
+    private var outfitChoice: String { preferences.string(forKey: Self.outfitKey) ?? "seasonal" }
+    /// What he's wearing right now. Refreshed once a minute, so the season
+    /// arrives on its own.
+    private var outfit: String?
     private var hop: Hop?
     /// A pose asked for mid-jump. It plays once he lands.
     private var afterHop: String?
     /// Poses he jumps from. Anything holding a prop or sitting glides instead.
     private static let leapingPoses: Set<String> = [
         "idle", "think", "stroke", "nod", "glance", "adjust", "glint", "land", "touchdown",
-        "groove", "land-phones",
+        "groove", "land-phones", "feel", "fingerup", "sway", "walk", "grabbed", "held",
+        "wince", "fistpump", "proud",
     ]
     /// Shorter than this, a jump is a hop: no charge, no spin.
     private static let chargedJumpFrom = 120.0
@@ -1062,7 +1226,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     /// The seated states. Entering meditate goes through sitdown; leaving any of
     /// them goes through standup — request() enforces both.
-    private static let sittingStates: Set<String> = ["sitdown", "meditate"]
+    private static let sittingStates: Set<String> = ["sitdown", "meditate", "sleep"]
 
     /// Pending steps of a guided breath; empty means not breathing.
     private var breathWork: [DispatchWorkItem] = []
@@ -1142,6 +1306,8 @@ final class Buddy: NSObject, NSMenuDelegate {
     static var breakReset: TimeInterval = 15 * 60
     /// When you've been away this long, he sits down and meditates.
     static var meditateAfter: TimeInterval = 8 * 60
+    /// Late at night, away this long, and he nods off.
+    static var sleepAfter: TimeInterval = 12 * 60
     /// A busy pose (think/stroke) with no state event for this long means the
     /// session died without a Stop; he drifts back to idle.
     static var busyStaleAfter: TimeInterval = 30 * 60
@@ -1223,7 +1389,9 @@ final class Buddy: NSObject, NSMenuDelegate {
             self.bubble.hide()
             self.isDragging = true
             self.cancelHop()
+            self.fling = nil  // caught mid-air
         }
+        view.onDragStart = { [weak self] in self?.pickedUp() }
         view.onClick = { [weak self] in
             guard let self else { return }
             self.isDragging = false
@@ -1243,15 +1411,37 @@ final class Buddy: NSObject, NSMenuDelegate {
             self.request("nod")
             self.speakLine()
         }
-        view.onDragEnd = { [weak self] in
+        view.onDragEnd = { [weak self] velocity in
             guard let self else { return }
             self.isDragging = false
-            self.dropped()
+            if hypot(velocity.dx, velocity.dy) > 650,
+                !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            {
+                self.throwHim(velocity)
+            } else {
+                self.dropped()
+                let next = self.afterHop ?? self.restingPose()
+                self.afterHop = nil
+                if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    self.request(next)
+                } else {
+                    self.play("touchdown")
+                    self.pendingTarget = next
+                }
+            }
         }
+        view.glowRadius = pixel * 1.6
         music.onChange = { [weak self] playing in self?.musicChanged(playing) }
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in self?.ticksSincePerchPoll = 999 }  // look now, not in half a second
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            if let app, app.processIdentifier != getpid() { PerchTarget.lastOtherApp = app }
+            self?.ticksSincePerchPoll = 999  // look now, not in half a second
+        }
+        if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != getpid() {
+            PerchTarget.lastOtherApp = front
+        }
         view.onRightClick = { [weak self] event in
             guard let self else { return }
             NSMenu.popUpContextMenu(self.buildMenu(), with: event, for: self.view)
@@ -1286,6 +1476,7 @@ final class Buddy: NSObject, NSMenuDelegate {
 
         // Someone who's had him a while learns about the new tricks once, from
         // him, a little after launch — not from a changelog they'll never read.
+        let heardNews3 = preferences.bool(forKey: "buddyNews3")
         if !preferences.bool(forKey: "buddyNews3") {
             preferences.set(true, forKey: "buddyNews3")
             if returning {
@@ -1295,6 +1486,17 @@ final class Buddy: NSObject, NSMenuDelegate {
                     self.say(self.perchEnabled
                         ? "New: headphones on when your music plays."
                         : "New: headphones when your music plays, and I can stand on your windows. It’s in Settings.")
+                }
+            }
+        }
+
+        if !preferences.bool(forKey: "buddyNews4") {
+            preferences.set(true, forKey: "buddyNews4")
+            if returning, heardNews3 {  // one piece of news per launch
+                DispatchQueue.main.asyncAfter(deadline: .now() + 40) { [weak self] in
+                    guard let self, !self.isBreathing, !self.bubble.isVisible, !self.inQuietHour,
+                        Buddy.quietSecondsRange != nil else { return }
+                    self.say("New: pick me up and throw me. I land on my feet.")
                 }
             }
         }
@@ -1320,7 +1522,12 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
         RunLoop.main.add(tickTimer, forMode: .common)
         timer = tickTimer
-        if isFocusing { request("meditate") }
+        if isFocusing { request("meditate"); showCandle() }
+        refreshOutfit()
+        // Testing: RUBIN_GIF_OUT=<path> writes the shareable GIF at launch.
+        if let path = ProcessInfo.processInfo.environment["RUBIN_GIF_OUT"] {
+            log("gif \(writeGIF(to: URL(fileURLWithPath: path)) ? "written" : "failed")")
+        }
 
         log("bundle=\(appDirectory.path) managed=\(isManagedInstall) v=\(localVersion)")
         if isManagedInstall {
@@ -1373,6 +1580,8 @@ final class Buddy: NSObject, NSMenuDelegate {
         let size = spriteSize()
         window.setFrame(
             NSRect(x: old.minX, y: old.minY, width: size.width, height: size.height), display: true)
+        view.glowRadius = pixel * 1.6
+        positionCandle()
     }
 
     /// A display being unplugged can leave him stranded off-screen. This rescue
@@ -1397,6 +1606,8 @@ final class Buddy: NSObject, NSMenuDelegate {
         let size = spriteSize()
         window.setFrame(
             NSRect(x: old.minX, y: old.minY, width: size.width, height: size.height), display: true)
+        view.glowRadius = pixel * 1.6
+        positionCandle()
         bubble.hide()
     }
 
@@ -1443,10 +1654,20 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// routes into and out of sitting through sitdown/standup.
     private func request(_ name: String) {
         guard let target = sprites.animations[name] else { return }
-        // Mid-jump the body is busy. Whatever was asked for plays on landing.
-        if hop?.leaps == true {
+        // Mid-jump, mid-throw or held up in the air, the body is busy.
+        // Whatever was asked for plays once he's back on his feet.
+        if hop?.leaps == true || fling != nil || (isDragging && ["grabbed", "held"].contains(currentAnimation)) {
             afterHop = name
             return
+        }
+        // Out for a stroll: hop back to his spot first; this plays on landing.
+        if stroll != nil {
+            endStroll()
+            jump(to: strollBase)
+            if hop?.leaps == true {
+                afterHop = name
+                return
+            }
         }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             var resting = name
@@ -1481,14 +1702,16 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
         let here = sprites.animations[currentAnimation]?.shades ?? "down"
 
-        // Taking the floor: meditate always begins by sitting down — and if the
-        // shades are up, they come down first rather than teleporting.
-        if name == "meditate", !Self.sittingStates.contains(currentAnimation) {
+        // Taking the floor: meditating and sleeping always begin by sitting
+        // down — and if the shades are up, they come down first rather than
+        // teleporting.
+        if name == "meditate" || name == "sleep", !Self.sittingStates.contains(currentAnimation) {
             if here == "up", let bridge = sprites.transition(from: "up", to: "down") {
-                pendingTarget = "meditate"
+                pendingTarget = name
                 play(bridge)
             } else {
-                pendingTarget = nil  // a stale target must not hijack the sit
+                // sitdown settles into meditate itself; a stale target must not hijack it
+                pendingTarget = name == "meditate" ? nil : name
                 play("sitdown")
             }
             return
@@ -1572,6 +1795,8 @@ final class Buddy: NSObject, NSMenuDelegate {
             refreshPanel()
             pollPresence()
             music.poll()
+            minuteTicks += 1
+            if minuteTicks >= 60 { minuteTicks = 0; refreshOutfit() }
         }
 
         // Idle fidgets. A gesture ends by returning to idle; a state event that
@@ -1595,7 +1820,9 @@ final class Buddy: NSObject, NSMenuDelegate {
             // clumping is what reads as "he only ever does one thing."
             let pool = ["stroke", "think", "glasses", "glance", "adjust", "stretch", "tea", "glint"]
                 .filter { $0 != lastFidget }
-            if let gesture = pool.randomElement() {
+            if lastFidget != "stroll", Int.random(in: 0..<4) == 0, startStroll() {
+                lastFidget = "stroll"
+            } else if let gesture = pool.randomElement() {
                 lastFidget = gesture
                 fidgetUntil = Date().addingTimeInterval(.random(in: Self.fidgetLength))
                 request(gesture)
@@ -1612,6 +1839,25 @@ final class Buddy: NSObject, NSMenuDelegate {
             updatePerch()
         }
         stepHop()
+        stepStroll()
+        stepFling()
+        stepGlow()
+        stepCandle()
+
+        // Moments in the groove: a cup pressed to the ear, a finger up, a sway.
+        if currentAnimation != "groove", !Self.musicStates.contains(currentAnimation) {
+            nextMomentAt = .distantFuture
+        } else if nextMomentAt == .distantFuture {
+            nextMomentAt = Date().addingTimeInterval(.random(in: 25...50))
+        }
+        if currentAnimation == "groove", Date() >= nextMomentAt,
+            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        {
+            let pick = ["feel", "fingerup", "sway"].filter { $0 != lastMoment }.randomElement() ?? "sway"
+            lastMoment = pick
+            nextMomentAt = Date().addingTimeInterval(.random(in: 45...100))
+            request(pick)
+        }
 
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               let animation, !animation.frames.isEmpty else { return }
@@ -1630,9 +1876,9 @@ final class Buddy: NSObject, NSMenuDelegate {
                 return
             }
             if let next = animation.next {
-                // A gesture finishing while the music plays settles back into
-                // the groove, not into standing still.
-                if next == "idle", grooveWanted { request("groove") } else { play(next) }
+                // A one-shot ending in idle goes back to whatever he should be
+                // doing: Claude's state, the groove, the sit.
+                if next == "idle" { request(restingPose()) } else { play(next) }
                 return
             }
         }
@@ -1665,6 +1911,12 @@ final class Buddy: NSObject, NSMenuDelegate {
                 self.speakContextual(["listening"], at: Date())
             }
         }
+    }
+
+    /// Untick an app that keeps a sound channel open and isn't music.
+    @objc private func toggleMusicSource(_ sender: NSMenuItem) {
+        guard let app = sender.representedObject as? String else { return }
+        music.setCounts(app, music.ignored.contains(app))
     }
 
     @objc private func toggleGroove() {
@@ -1719,7 +1971,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     }
 
     private func updatePerch() {
-        guard window.isVisible, !isDragging, hop == nil else { return }
+        guard window.isVisible, !isDragging, hop == nil, fling == nil, Date() >= perchPauseUntil else { return }
         let id: CGWindowID
         let spot: NSPoint
         switch PerchTarget.current() {
@@ -1738,12 +1990,15 @@ final class Buddy: NSObject, NSMenuDelegate {
             perchApp = app
         }
 
+        perchBase = spot
         if id == perchedOn {
             perchCandidate = nil
-            // Same window, moved or resized under him: ride along, no jump.
-            if window.frame.origin != spot {
+            // Same window, moved or resized under him: ride along, no jump —
+            // a stroll in progress included.
+            let here = NSPoint(x: spot.x + strollOffset, y: spot.y)
+            if window.frame.origin != here {
                 perchFastUntil = Date().addingTimeInterval(0.6)
-                move(to: spot)
+                move(to: here)
             }
             return
         }
@@ -1755,12 +2010,307 @@ final class Buddy: NSObject, NSMenuDelegate {
         guard let since = perchCandidate?.since, Date().timeIntervalSince(since) >= 0.25 else { return }
         perchCandidate = nil
         perchedOn = id
+        endStroll()
         jump(to: spot)
+    }
+
+    // MARK: strolls
+
+    /// Where his spot is, for a stroll to start from and come back to.
+    private var strollBase: NSPoint { (perchEnabled ? perchBase : nil) ?? strollHome }
+
+    /// Off along the edge he's standing on, 40-120 points, toward the side
+    /// with room. False if there's nowhere to go.
+    private func startStroll() -> Bool {
+        guard stroll == nil, hop == nil, fling == nil, !isDragging, window.isVisible,
+            !isFocusing, !isBreathing, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else { return false }
+        strollHome = window.frame.origin
+        let base = strollBase
+        let size = spriteSize()
+        let below = Double(sprites.baseline) * pixel
+        // The stretch of edge he can walk: the window's top edge, the inside of a
+        // window, or the screen — and never off the screen.
+        var lane: (low: Double, high: Double)
+        if perchEnabled, perchedOn != 0, let frame = perchFrame {
+            lane = abs(base.y - (frame.maxY - below)) < 1
+                ? (frame.minX + 30, frame.maxX - 30 - size.width)  // on its top edge
+                : (insideRange(of: frame).minX, insideRange(of: frame).maxX)
+        } else {
+            let area = Self.screen(containing: base)?.visibleFrame ?? .zero
+            lane = (area.minX + 8, area.maxX - 8 - size.width)
+        }
+        if let area = Self.screen(containing: base)?.visibleFrame {
+            lane = (max(lane.low, area.minX), min(lane.high, area.maxX - size.width))
+        }
+        let distance = Double.random(in: 40...120)
+        let room = (left: base.x - lane.low, right: lane.high - base.x)
+        let goRight: Bool
+        switch (room.left >= distance, room.right >= distance) {
+        case (true, true): goRight = Bool.random()
+        case (false, true): goRight = true
+        case (true, false): goRight = false
+        default: return false
+        }
+        cancelFidget()
+        stroll = Stroll(target: goRight ? distance : -distance)
+        view.mirrored = !goRight
+        play("walk")
+        return true
+    }
+
+    /// A walking pace — about 30 points a second at his default size — out,
+    /// a look around, and back.
+    private func stepStroll() {
+        guard var walk = stroll else { return }
+        if let until = walk.pauseUntil {
+            guard Date() >= until else { return }
+            walk.pauseUntil = nil
+            walk.returning = true
+            walk.target = 0
+            stroll = walk
+            view.mirrored = strollOffset > 0
+            play("walk")
+            return
+        }
+        let step = 10 * pixel / Double(Self.ticksPerSecond)
+        let remaining = walk.target - strollOffset
+        if abs(remaining) <= step {
+            strollOffset = walk.target
+            if walk.returning {
+                endStroll()
+                request(restingPose())
+                scheduleNextFidget()
+            } else {
+                walk.pauseUntil = Date().addingTimeInterval(.random(in: 1.4...2.6))
+                stroll = walk
+                view.mirrored = false
+                play("glance")
+            }
+        } else {
+            strollOffset += remaining > 0 ? step : -step
+        }
+        let base = strollBase
+        move(to: NSPoint(x: (base.x + strollOffset).rounded(), y: base.y))
+    }
+
+    private func endStroll() {
+        guard stroll != nil else { return }
+        stroll = nil
+        strollOffset = 0
+        view.mirrored = false
+    }
+
+    // MARK: picked up and thrown
+
+    private func pickedUp() {
+        endStroll()
+        sitReason = nil  // whatever sit this was, it's over
+        if isBreathing { cancelBreath(standUp: false) }
+        heldWithPhones = Self.musicStates.contains(currentAnimation)
+        afterHop = nil
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { play("grabbed") }
+    }
+
+    /// Let go mid-swing: he flies, tumbling, under gravity, off the sides of
+    /// the screen, until he comes down on the window he lives on or the bottom
+    /// of the screen. Script it too: `state.sh fling 1400 900`.
+    private func throwHim(_ velocity: CGVector) {
+        let speed = hypot(velocity.dx, velocity.dy)
+        let scale = speed > 3200 ? 3200 / speed : 1
+        endStroll()
+        cancelHop()
+        fling = Fling(
+            position: window.frame.origin,
+            velocity: CGVector(dx: velocity.dx * scale, dy: velocity.dy * scale),
+            phones: heldWithPhones || Self.musicStates.contains(currentAnimation))
+        log("thrown \(Int(velocity.dx)),\(Int(velocity.dy))")
+    }
+
+    private func stepFling() {
+        guard var flight = fling else { return }
+        let now = Date()
+        let dt = min(0.05, now.timeIntervalSince(flight.last))
+        flight.last = now
+        flight.velocity.dy -= 2600 * dt
+        let size = window.frame.size
+        let below = Double(sprites.baseline) * pixel
+        var next = NSPoint(
+            x: flight.position.x + flight.velocity.dx * dt,
+            y: flight.position.y + flight.velocity.dy * dt)
+        let center = NSPoint(x: flight.position.x + size.width / 2, y: flight.position.y + size.height / 2)
+        let area = (Self.screen(containing: center) ?? window.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        // Off the walls and the ceiling, losing some speed each time.
+        if next.x < area.minX { next.x = area.minX; flight.velocity.dx = abs(flight.velocity.dx) * 0.55 }
+        if next.x + size.width > area.maxX {
+            next.x = area.maxX - size.width
+            flight.velocity.dx = -abs(flight.velocity.dx) * 0.55
+        }
+        if next.y + size.height > area.maxY {
+            next.y = area.maxY - size.height
+            flight.velocity.dy = -abs(flight.velocity.dy) * 0.3
+        }
+        // Coming down onto the top of his window, or the bottom of the screen.
+        var ground: Double?
+        let feetBefore = flight.position.y + below
+        let feetNow = next.y + below
+        if perchEnabled, let frame = perchFrame, flight.velocity.dy < 0,
+            feetBefore >= frame.maxY - 1, feetNow <= frame.maxY,
+            next.x + size.width / 2 > frame.minX, next.x + size.width / 2 < frame.maxX
+        {
+            ground = frame.maxY
+        } else if feetNow <= area.minY {
+            ground = area.minY
+        } else if now.timeIntervalSince(flight.started) > 4 {
+            ground = feetNow  // never fly forever
+        }
+        if let ground {
+            fling = nil
+            move(to: NSPoint(x: next.x.rounded(), y: (ground - below).rounded()))
+            landedFromThrow(onWindowTop: perchFrame.map { abs(ground - $0.maxY) < 1 } ?? false,
+                            phones: flight.phones)
+            return
+        }
+        // Tumbling forward in the direction he's going, a quarter at a time.
+        flight.spin += flight.velocity.dx * dt / (pixel * 9)
+        let quarter = ((Int(flight.spin.rounded(.down)) % 4) + 4) % 4
+        let age = now.timeIntervalSince(flight.started)
+        show(flight.phones ? "flip-phones" : "flip", frame: age < 0.1 ? 0 : 1 + quarter)
+        flight.position = next
+        fling = flight
+        move(to: NSPoint(x: next.x.rounded(), y: next.y.rounded()))
+    }
+
+    private func landedFromThrow(onWindowTop: Bool, phones: Bool) {
+        play(phones ? "land-phones" : "land")
+        pendingTarget = afterHop ?? restingPose()
+        afterHop = nil
+        perchPauseUntil = Date().addingTimeInterval(1.4)  // dust himself off first
+        guard perchEnabled else { return saveOrigin() }
+        if onWindowTop, let frame = perchFrame {
+            // Landed on his window's top edge: that's where he stands now.
+            let span = frame.width - 60 - window.frame.width
+            if span > 0 {
+                perchSpot = min(1, max(0, (window.frame.minX - frame.minX - 30) / span))
+                preferences.set(perchSpot, forKey: Self.perchSpotKey)
+            }
+            if let app = perchApp { appSpots[app] = nil; preferences.set(appSpots, forKey: Self.appSpotsKey) }
+        }
+        perchedOn = nil  // look again — and jump back to his spot if this isn't it
+    }
+
+    // MARK: glow, candle, outfit
+
+    /// While Claude works he glows a little, breathing in and out — through
+    /// the groove too, so the music never hides that work is happening.
+    private func stepGlow() {
+        ticksSinceGlow += 1
+        guard ticksSinceGlow >= 3 else { return }
+        ticksSinceGlow = 0
+        var target: CGFloat = 0
+        if claudeWorking, window.isVisible {
+            let still = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let phase = Date().timeIntervalSinceReferenceDate * 2 * .pi / 2.6
+            target = still ? 0.5 : CGFloat(0.42 + 0.22 * sin(phase))
+        }
+        guard abs(target - view.glow) > 0.01 else { return }
+        view.glow = target
+        view.needsDisplay = true
+    }
+
+    private func showCandle() {
+        if candleWindow == nil {
+            let candle = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+                styleMask: .borderless, backing: .buffered, defer: false)
+            candle.isOpaque = false
+            candle.backgroundColor = .clear
+            candle.hasShadow = false
+            candle.ignoresMouseEvents = true
+            candle.level = .floating
+            candle.collectionBehavior = [.canJoinAllSpaces, .stationary]
+            candle.contentView = candleView
+            candleWindow = candle
+        }
+        guard let candle = candleWindow, sprites.animations["candle"] != nil else { return }
+        positionCandle()
+        candleFrame = 0
+        candleView.image = sprites.animations["candle"]?.frames.first?.image
+        candleView.needsDisplay = true
+        if candle.parent == nil { window.addChildWindow(candle, ordered: .below) }
+        candle.orderFront(nil)
+    }
+
+    /// Just to his right, on the same ground. A child window, so it moves
+    /// with him wherever he goes.
+    private func positionCandle() {
+        guard let candle = candleWindow else { return }
+        let size = spriteSize()
+        candle.setFrame(
+            NSRect(x: window.frame.minX + 14 * pixel, y: window.frame.minY,
+                   width: size.width, height: size.height), display: true)
+    }
+
+    private func hideCandle() {
+        guard let candle = candleWindow else { return }
+        window.removeChildWindow(candle)
+        candle.orderOut(nil)
+    }
+
+    private func stepCandle() {
+        guard let candle = candleWindow, candle.isVisible,
+            let frames = sprites.animations["candle"]?.frames, !frames.isEmpty,
+            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else { return }
+        candleTicks += 1
+        guard candleTicks >= frames[candleFrame % frames.count].hold else { return }
+        candleTicks = 0
+        candleFrame = (candleFrame + 1) % frames.count
+        candleView.image = frames[candleFrame].image
+        candleView.needsDisplay = true
+    }
+
+    /// The calendar's outfit, if any: a witch's hat the last week of October,
+    /// a Santa hat around Christmas, a party hat for New Year's, a beanie the
+    /// rest of the winter. RUBIN_DATE=YYYY-MM-DD pretends it's another day.
+    static func seasonalOutfit(on date: Date) -> String? {
+        let parts = Calendar.current.dateComponents([.month, .day], from: date)
+        switch (parts.month ?? 0, parts.day ?? 0) {
+        case (10, 25...31): return "witch"
+        case (12, 20...26): return "santa"
+        case (12, 31), (1, 1): return "party"
+        case (12, _), (1, _), (2, _): return "beanie"
+        default: return nil
+        }
+    }
+
+    private static var today: Date {
+        if let fake = ProcessInfo.processInfo.environment["RUBIN_DATE"] {
+            let format = DateFormatter()
+            format.dateFormat = "yyyy-MM-dd"
+            if let date = format.date(from: fake) { return date }
+        }
+        return Date()
+    }
+
+    private func refreshOutfit() {
+        let choice = outfitChoice
+        let wearing = choice == "seasonal" ? Self.seasonalOutfit(on: Self.today) : choice == "none" ? nil : choice
+        guard wearing != outfit else { return }
+        outfit = wearing
+        renderCurrentFrame()
+    }
+
+    @objc private func setOutfit(_ sender: NSMenuItem) {
+        guard let choice = sender.representedObject as? String else { return }
+        preferences.set(choice, forKey: Self.outfitKey)
+        refreshOutfit()
     }
 
     private func move(to point: NSPoint) {
         window.setFrameOrigin(point)
-        bubble.follow(window.frame, screen: window.screen)
+        bubble.follow(speechFrame, screen: window.screen)
     }
 
     /// A ballistic arc from here to there: linear across, a parabola up and
@@ -1927,8 +2477,34 @@ final class Buddy: NSObject, NSMenuDelegate {
 
     private func renderCurrentFrame() {
         guard let animation, frameIndex < animation.frames.count else { return }
-        view.image = animation.frames[frameIndex].image
+        view.image = animation.frames[frameIndex].image(wearing: outfit)
         view.needsDisplay = true
+        snapshot()
+    }
+
+    /// His window as speech sees it: the top trimmed to his head, unless a hat
+    /// is using the headroom.
+    private var speechFrame: NSRect {
+        var frame = window.frame
+        if outfit == nil { frame.size.height -= Double(sprites.headroom - 1) * pixel }
+        return frame
+    }
+
+    /// RUBIN_SNAPSHOTS=<dir>: every frame he shows, as drawn (glow, mirroring
+    /// and all), written as a PNG. For checking his look without a screen
+    /// recording permission.
+    private static let snapshotDirectory = ProcessInfo.processInfo.environment["RUBIN_SNAPSHOTS"]
+    private var snapshotCount = 0
+    private func snapshot() {
+        guard let directory = Self.snapshotDirectory, snapshotCount < 2000,
+            let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+        else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        snapshotCount += 1
+        let name = String(format: "%04d-%@-%d%@.png", snapshotCount, currentAnimation, frameIndex,
+                          view.mirrored ? "-m" : "")
+        try? rep.representation(using: .png, properties: [:])?
+            .write(to: URL(fileURLWithPath: directory).appendingPathComponent(name))
     }
 
     // MARK: Claude Code state
@@ -1966,7 +2542,26 @@ final class Buddy: NSObject, NSMenuDelegate {
                 FileHandle.standardError.write("say: \(text)\n".data(using: .utf8)!)
             }
             window.orderFrontRegardless()
-            bubble.show(String(text), over: window.frame, pixel: pixel, screen: window.screen)
+            bubble.show(String(text), over: speechFrame, pixel: pixel, screen: window.screen)
+            return
+        }
+        // Two more words that aren't animations: "stroll" sends him for a walk,
+        // "fling <dx> <dy>" throws him (points per second, up is positive).
+        if name == "stroll" {
+            if currentAnimation == "idle" { _ = startStroll() }
+            return
+        }
+        // And "sit": the 25-minute quiet sit, candle and all (again to end it).
+        if name == "sit" {
+            toggleFocus()
+            return
+        }
+        if name.hasPrefix("fling ") {
+            let parts = name.split(separator: " ").dropFirst().compactMap { Double($0) }
+            if parts.count == 2, !isFocusing, !isBreathing {
+                heldWithPhones = Self.musicStates.contains(currentAnimation)
+                throwHim(CGVector(dx: parts[0], dy: parts[1]))
+            }
             return
         }
         guard !name.isEmpty, sprites.animations[name] != nil else { return }
@@ -1975,7 +2570,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         // Seated for a long run: more of the same work is not a reason to stand.
         // Anything that ISN'T the same work (nod, glasses, idle) still is.
         if sitReason == "long", ["think", "stroke"].contains(name) { return }
-        let pose = withMusic(name)
+        let pose = withMusic(name == "nod" && lastRunWasLong ? "proud" : name)
         // Re-triggering what's already playing would just make it stutter — and
         // a repeat that matches the pending target would hard-cut the bridge
         // that's currently carrying him there.
@@ -2026,6 +2621,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         // Stop, and a buddy that comments on all of them stops being listened to.
         // The exception: a LONG run ending always deserves the word, cooldown or
         // not — if you waited half an hour for it, he has something to say.
+        if name == "nod" { lastRunWasLong = longRun }
         if name == "nod", longRun, canSpeakIgnoringCooldown() {
             speakContextual(["finishing"], at: now)
         } else if name == "nod", canSpeakContextual(now), Int.random(in: 0..<3) == 0 {
@@ -2120,7 +2716,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             FileHandle.standardError.write("deck: \(lineBag.count) left\n".data(using: .utf8)!)
         }
         noteSpoken(line)
-        bubble.show(line, over: window.frame, pixel: pixel, screen: window.screen)
+        bubble.show(line, over: speechFrame, pixel: pixel, screen: window.screen)
     }
 
     /// lines.txt grouped by its `# ── Theme ──` headers, keyed lowercase.
@@ -2209,6 +2805,11 @@ final class Buddy: NSObject, NSMenuDelegate {
                 sitReason = nil
                 request("idle")
             }
+            // Asleep: you're back, so he wakes — up, and a long stretch.
+            if sitReason == "asleep", currentAnimation == "sleep" {
+                sitReason = nil
+                request("stretch")
+            }
 
             // An arrival is activity after a real gap (or the first since
             // launch) — NOT the date flipping at midnight under your hands.
@@ -2237,6 +2838,13 @@ final class Buddy: NSObject, NSMenuDelegate {
                 sitReason = "away"
                 request("meditate")
             }
+            // Late, and nobody's been here a while: he nods off where he sits.
+            if Self.isNight(now), idle >= Self.sleepAfter, !isFocusing,
+                currentAnimation == "idle" || (currentAnimation == "meditate" && ["away", "night"].contains(sitReason))
+            {
+                sitReason = "asleep"
+                request("sleep")
+            }
         }
 
         // Late: idle becomes the seated pose — he sits with you, not at you.
@@ -2245,7 +2853,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         if Self.isNight(now), currentAnimation == "idle", fidgetUntil == nil, !isBreathing {
             sitReason = "night"
             request("meditate")
-        } else if !Self.isNight(now), sitReason == "night",
+        } else if !Self.isNight(now), sitReason == "night" || sitReason == "asleep",
             Self.sittingStates.contains(currentAnimation), !isBreathing
         {
             sitReason = nil
@@ -2338,7 +2946,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             FileHandle.standardError.write("ctx \(groupNames): \(line)\n".data(using: .utf8)!)
         }
         noteSpoken(line)
-        bubble.show(line, over: window.frame, pixel: pixel, screen: window.screen)
+        bubble.show(line, over: speechFrame, pixel: pixel, screen: window.screen)
         lastContextual = now
         // He just spoke; push the random line back out so they don't stack.
         scheduleNextLine()
@@ -2416,7 +3024,7 @@ final class Buddy: NSObject, NSMenuDelegate {
     /// Say something specific, rather than a line from the deck.
     private func say(_ text: String) {
         window.orderFrontRegardless()
-        bubble.show(text, over: window.frame, pixel: pixel, screen: window.screen)
+        bubble.show(text, over: speechFrame, pixel: pixel, screen: window.screen)
     }
 
     // MARK: guided breath
@@ -2439,7 +3047,7 @@ final class Buddy: NSObject, NSMenuDelegate {
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.bubble.show(
-                    text, over: self.window.frame, pixel: self.pixel,
+                    text, over: self.speechFrame, pixel: self.pixel,
                     screen: self.window.screen, duration: length - 0.4)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + at, execute: work)
@@ -2494,6 +3102,8 @@ final class Buddy: NSObject, NSMenuDelegate {
         let all = sessionCache.values.map { $0.1 }
         let now = Date().timeIntervalSince1970
         sessions = AgentSession.ordered(all, at: now, acknowledged: acknowledged)
+        claudeWorking = sessions.contains { $0.effectivePhase(at: now) == "working" }
+        reactToTurns(all)
         let currentIDs = Set(all.map(\.id))
         acknowledged = acknowledged.filter { currentIDs.contains($0.key) }
         let signature = sessions.first.map { "\($0.id):\($0.effectivePhase(at: now)):\($0.updated)" } ?? "none"
@@ -2507,8 +3117,42 @@ final class Buddy: NSObject, NSMenuDelegate {
         let event = agentPose(first)
         noteStateEvent(event)
         guard !isFocusing, !isBreathing else { return }
-        let pose = withMusic(event)
+        let pose = withMusic(event == "nod" && lastRunWasLong ? "proud" : event)
         if pose != currentAnimation && pose != pendingTarget && pose != afterHop { request(pose) }
+    }
+
+    /// A command failed: a wince. The first success after failures: a fist
+    /// pump. Once per event, spaced out, and only when he's free to — not
+    /// mid-sit, mid-breath, asleep, in the air or in the groove.
+    private func reactToTurns(_ all: [AgentSession]) {
+        var wince = false
+        var pump = false
+        for session in all {
+            let failed = session.failedAt ?? 0
+            let recovered = session.recoveredAt ?? 0
+            if let seen = seenTurns[session.id] {
+                if failed > seen.failed { wince = true }
+                if recovered > seen.recovered { pump = true }
+            }
+            seenTurns[session.id] = (failed, recovered)  // first sight: history, not news
+        }
+        seenTurns = seenTurns.filter { id, _ in all.contains { $0.id == id } }
+        guard wince || pump, window.isVisible, !isFocusing, !isBreathing, !isDragging,
+            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            hop == nil, fling == nil,
+            !Self.musicStates.contains(currentAnimation), !Self.sittingStates.contains(currentAnimation)
+        else { return }
+        let now = Date()
+        let reaction: String
+        if pump, now.timeIntervalSince(lastPump) > 60 {
+            reaction = "fistpump"
+            lastPump = now
+        } else if wince, now.timeIntervalSince(lastWince) > 25 {
+            reaction = "wince"
+            lastWince = now
+        } else { return }
+        cancelFidget()
+        request(reaction)
     }
 
     private func agentPose(_ session: AgentSession) -> String {
@@ -2520,9 +3164,16 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
     }
 
+    /// What he should be doing when nothing in particular is happening: the
+    /// sit, Claude's state (a finished turn's nod is already done), or the groove.
+    private func restingPose() -> String {
+        if isFocusing { return "meditate" }
+        let pose = sessions.first.map(agentPose) ?? "idle"
+        return withMusic(pose == "nod" ? "idle" : pose)
+    }
+
     private func restoreAgentPose() {
-        if isFocusing { request("meditate") }
-        else { request(withMusic(sessions.first.map(agentPose) ?? "idle")) }
+        request(restingPose())
     }
 
     @objc private func openCompanion() {
@@ -2536,7 +3187,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         guard let button = statusItem?.button else { return }
         if companionPanel == nil {
             let panel = CompanionPanel()
-            panel.icon = sprites.animations["idle"]?.frames.first?.image
+            panel.icon = sprites.animations["idle"]?.frames.first?.image(wearing: outfit)
             panel.onAction = { [weak self] action in self?.performCompanionAction(action) }
             companionPanel = panel
             _ = panel.view
@@ -2628,6 +3279,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         preferences.set(focusUntil!.timeIntervalSince1970, forKey: "buddyFocusUntil")
         window.orderFrontRegardless()
         request("meditate")
+        showCandle()
         say("Just this one thing. I’ll sit with you.")
     }
 
@@ -2639,6 +3291,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         guard focusUntil != nil else { return }
         focusUntil = nil
         preferences.removeObject(forKey: "buddyFocusUntil")
+        hideCandle()
         restoreAgentPose()
         scheduleNextLine(); scheduleNextFidget()
         if announce && window.isVisible && !inQuietHour && Buddy.quietSecondsRange != nil {
@@ -2670,8 +3323,9 @@ final class Buddy: NSObject, NSMenuDelegate {
         let font = NSFont(name: "Georgia", size: fontSize) ?? .systemFont(ofSize: fontSize)
         quote.draw(in: NSRect(x: 80, y: 210, width: 710, height: 330),
                    withAttributes: [.font: font, .foregroundColor: INK])
-        if let sprite = sprites.animations["idle"]?.frames.first?.image {
-            sprite.draw(in: NSRect(x: 810, y: 90, width: 104, height: 136),
+        if let sprite = sprites.animations["idle"]?.frames.first?.image(wearing: outfit) {
+            let tall = 104 * sprite.size.height / max(1, sprite.size.width)
+            sprite.draw(in: NSRect(x: 810, y: 90, width: 104, height: tall),
                 from: .zero, operation: .sourceOver, fraction: 1,
                 respectFlipped: false, hints: [.interpolation: NSImageInterpolation.none.rawValue])
         }
@@ -2692,6 +3346,69 @@ final class Buddy: NSObject, NSMenuDelegate {
         NSPasteboard.general.setData(png, forType: .png)
         NSPasteboard.general.setData(tiff, forType: .tiff)
         companionPanel?.noticeLabel.stringValue = "Picture copied. Paste it wherever you like."
+    }
+
+    /// A few seconds of him on paper for sharing: breathing, the glint, the
+    /// charge, a spinning jump, the landing, a fist in the air. In whatever he's
+    /// wearing.
+    @objc private func saveGIF() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Rick.gif"
+        panel.allowedContentTypes = [.gif]
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        say(writeGIF(to: url) ? "Saved. Share me around." : "Couldn’t make that one.")
+    }
+
+    @discardableResult
+    func writeGIF(to url: URL) -> Bool {
+        let scale = 6
+        let lift = 22  // rows of sky above him, for the jump
+        let width = sprites.pixelWidth * scale
+        let height = (sprites.pixelHeight + lift) * scale
+        var steps: [(image: NSImage, hold: Int, up: Int)] = []
+        func add(_ name: String, holdCap: Int = 60) {
+            for frame in sprites.animations[name]?.frames ?? [] {
+                steps.append((frame.image(wearing: outfit), min(frame.hold, holdCap), 0))
+            }
+        }
+        add("idle"); add("idle"); add("glint")
+        add("charge", holdCap: 8)
+        if let flip = sprites.animations["flip"]?.frames, flip.count == 5 {
+            for i in 0...9 {
+                let t = Double(i) / 9
+                let up = Int((4 * Double(lift - 2) * t * (1 - t)).rounded())
+                steps.append((flip[i == 0 ? 0 : 1 + i % 4].image(wearing: outfit), 2, up))
+            }
+        }
+        add("land"); add("fistpump"); add("idle")
+
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL, UTType.gif.identifier as CFString, steps.count, nil)
+        else { return false }
+        CGImageDestinationSetProperties(destination, [
+            kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0],
+        ] as CFDictionary)
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        for step in steps {
+            guard let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                let sprite = step.image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            else { return false }
+            context.setFillColor(PAPER.cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.interpolationQuality = .none
+            context.draw(sprite, in: CGRect(
+                x: 0, y: step.up * scale,
+                width: sprites.pixelWidth * scale, height: sprites.pixelHeight * scale))
+            guard let frame = context.makeImage() else { return false }
+            CGImageDestinationAddImage(destination, frame, [
+                kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: Double(step.hold) / 30],
+            ] as CFDictionary)
+        }
+        return CGImageDestinationFinalize(destination)
     }
 
     @objc private func copyThoughtPicture() {
@@ -2814,6 +3531,35 @@ final class Buddy: NSObject, NSMenuDelegate {
         menu.addItem(item("Bring Him Back", #selector(bringBackAndShow)))
         menu.addItem(item("Stand on Your Window", #selector(togglePerch), on: perchEnabled))
         menu.addItem(item("Headphones with Music", #selector(toggleGroove), on: grooveEnabled))
+        let sources = music.heardApps  // ignored ones included, so they can be ticked back in
+        if grooveEnabled, !sources.isEmpty {
+            let sourceMenu = NSMenu()
+            for app in sources.sorted() {
+                let name = NSRunningApplication.runningApplications(withBundleIdentifier: app).first?.localizedName
+                    ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: app)?
+                        .deletingPathExtension().lastPathComponent
+                    ?? app
+                let entry = item(name, #selector(toggleMusicSource(_:)), on: !music.ignored.contains(app))
+                entry.representedObject = app
+                sourceMenu.addItem(entry)
+            }
+            let sourceItem = NSMenuItem(title: "Music From", action: nil, keyEquivalent: "")
+            sourceItem.submenu = sourceMenu
+            menu.addItem(sourceItem)
+        }
+        let outfitMenu = NSMenu()
+        let inSeason = Self.seasonalOutfit(on: Self.today).flatMap { id in Self.outfitNames.first { $0.0 == id }?.1 }
+        let choices = [("seasonal", inSeason.map { "Seasonal (\($0) now)" } ?? "Seasonal"), ("none", "None")]
+            + Self.outfitNames
+        for (index, (id, title)) in choices.enumerated() {
+            if index == 2 { outfitMenu.addItem(.separator()) }
+            let entry = item(title, #selector(setOutfit(_:)), on: outfitChoice == id)
+            entry.representedObject = id
+            outfitMenu.addItem(entry)
+        }
+        let outfitItem = NSMenuItem(title: "Outfit", action: nil, keyEquivalent: "")
+        outfitItem.submenu = outfitMenu
+        menu.addItem(outfitItem)
         menu.addItem(.separator())
 
         let sizeMenu = NSMenu()
@@ -2874,6 +3620,7 @@ final class Buddy: NSObject, NSMenuDelegate {
         }
         menu.addItem(item("Keep This Thought", #selector(keepThought)))
         menu.addItem(item("Copy Thought Picture", #selector(copyThoughtPicture)))
+        menu.addItem(item("Save a GIF of Rick…", #selector(saveGIF)))
         menu.addItem(item("Say Something", #selector(saySomething)))
         menu.addItem(item("Take a Breath", #selector(takeABreath), on: isBreathing))
         menu.addItem(.separator())
@@ -3151,6 +3898,7 @@ if env["RUBIN_CTX_FAST"] == "1" {
     Buddy.breakEvery = 30
     Buddy.breakReset = 10
     Buddy.meditateAfter = 15
+    Buddy.sleepAfter = 25
     Buddy.busyStaleAfter = 60
     Buddy.arrivalGap = 40
     Buddy.returnGap = 90

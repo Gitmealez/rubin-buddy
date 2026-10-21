@@ -46,9 +46,23 @@ class SessionTests(unittest.TestCase):
         self.assertFalse((self.base / 'sessions').exists())
         self.event('private-id', 'PreToolUse')
         data = self.files()[0]
-        self.assertEqual(set(data), {'id','project','phase','detail','updated','event','provider'})
+        self.assertEqual(set(data), {'id','project','phase','detail','updated','event','provider','fails'})
         self.assertNotIn('private', json.dumps(data))
         self.assertEqual(data['project'], 'project')
+
+    def test_failures_and_recovery_are_times_only(self):
+        payload = {'session_id': 'abc', 'cwd': '/project', 'tool_input': {'command': 'SECRET'}}
+        adapter.record(self.base, 'PostToolUseFailure', payload, timestamp=100)
+        adapter.record(self.base, 'PostToolUseFailure', payload, timestamp=101)
+        data = self.files()[0]
+        self.assertEqual((data['fails'], data['failedAt']), (2, 101))
+        self.assertNotIn('recoveredAt', data)
+        adapter.record(self.base, 'PostToolUse', payload, timestamp=102)
+        data = self.files()[0]
+        self.assertEqual((data['fails'], data['failedAt'], data['recoveredAt']), (0, 101, 102))
+        adapter.record(self.base, 'PostToolUse', payload, timestamp=103)  # no failure to recover from
+        self.assertEqual(self.files()[0]['recoveredAt'], 102)
+        self.assertNotIn('SECRET', json.dumps(self.files()))
 
     def test_late_writer_cannot_overwrite_newer_state(self):
         payload = {'session_id': 'abc', 'cwd': '/project'}

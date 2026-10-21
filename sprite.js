@@ -29,6 +29,10 @@ const PALETTE = {
   l: [0x0e, 0x0c, 0x0b],     // lens
   r: [0xd9, 0x77, 0x57],     // Claude accent
   p: [0x2b, 0x27, 0x24],     // headphone band
+  y: [0xf6, 0xd2, 0x74],     // candle flame, party-hat pom
+  P: [0x4a, 0x2f, 0x63],     // witch hat
+  Q: [0x33, 0x20, 0x45],     // witch hat, shadow side
+  X: [0xc4, 0x3b, 0x2f],     // Santa hat
   R: [0xa8, 0x55, 0x3c],     // Claude accent, shadow side — the headphone cups
   q: [0xe9, 0xe4, 0xda],     // glint on the lenses
   v: [0x75, 0x72, 0x6f],     // steam off the tea, pre-blended over his tee
@@ -214,6 +218,21 @@ function stamp(rows, x, y, patch) {
   return out;
 }
 
+// Paint a row from spans: [[fromCol, toCol, char], ...] over a blank row.
+// Easier to adjust a drawn shape a pixel at a time than a run of strings.
+function spans(segments) {
+  const row = _(W).split('');
+  for (const [from, to, ch] of segments) {
+    for (let x = from; x <= to; x++) row[x] = ch;
+  }
+  return row.join('');
+}
+
+// Marks drawn above his head — Z's, a fist in the air, a frustration cross —
+// go in the headroom build.js adds over every frame, so their rows can be
+// negative (up to -HEADROOM). `{ rows, marks: [mark(x, y, patch)] }`.
+const mark = (x, y, patch) => ({ x, y, patch });
+
 // A little Claude-orange spark, for the thinking pose.
 function sparkLayer(y0) {
   const rows = blank();
@@ -373,10 +392,12 @@ const glintOn = (rows, x, dy) => stamp(rows, x, 7 + dy, ['.q', 'q.']);
 // rotates cleanly by right angles, so it's the seated ball (a 24x24 square)
 // turned a quarter at a time, held centred so the spin doesn't wobble.
 const quarterTurn = (sq) => sq.map((_row, y) => sq.map((row) => row[y]).reverse().join(''));
+// A 32x32 square centred on the ball (seated rows 4-35, cols -4..27), big
+// enough that a hat's tip turns with him; cropped back to the grid after.
 const spun = (seated, turns) => {
-  let sq = seated.slice(8, 32);
+  let sq = [...seated, _(W), _(W), _(W), _(W)].slice(4, 36).map((row) => '....' + row + '....');
   for (let i = 0; i < turns; i++) sq = quarterTurn(sq);
-  return [_(W), _(W), _(W), _(W), ...sq, _(W), _(W), _(W), _(W)];
+  return sq.map((row) => row.slice(4, 28));
 };
 
 // Landing: a hard crouch with the arms flung out for balance, dust thrown
@@ -411,7 +432,9 @@ function jumpOf(wear) {
     ],
     flip: [
       { rows: wear(airborne, 0), hold: 999 },
-      ...[0, 1, 2, 3].map((turns) => ({ rows: spun(wear(sitting, 8), turns), hold: 999 })),
+      ...[0, 1, 2, 3].map((turns) => ({
+        rows: spun(wear(sitting, 8), turns), hold: 999, spin: { seated: wear(sitting, 8), turns },
+      })),
     ],
     land: [
       { rows: impactOf(wear(deepCrouch, 3)), hold: 5 },
@@ -469,6 +492,151 @@ const NOTE = ['.rr', '.r.', 'rr.'];
 const phonesOn = withPhones(standing);
 // The head bobs down on the beat and tips to one side; the body keeps time.
 const bob = (rows, dx) => shiftBandX(shiftBand(rows, 0, HEAD_BAND_END, 1), 0, HEAD_BAND_END, dx);
+
+// Moments while the music plays, headphones on. Pressing a cup to his ear to
+// hear it properly; one finger up — that part, right there; a slow sway.
+const rightArmUp = (rows) => {
+  let out = rows;
+  for (let y = 14; y <= 22; y++) out = stamp(out, 19, y, ['bb']);  // the hanging arm leaves
+  return out;
+};
+const feelIt = (() => {
+  let rows = rightArmUp(bob(phonesOn, 1));
+  for (let y = 9; y <= 13; y++) rows = stamp(rows, 21, y, ['nn']);
+  return stamp(rows, 21, 6, ['kk', 'ss', 'ss']);       // palm on the cup
+})();
+const fingerUp = (() => {
+  let rows = rightArmUp(phonesOn);
+  for (let y = 6; y <= 13; y++) rows = stamp(rows, 20, y, ['nn']);
+  return stamp(rows, 19, 3, ['.ks.', 'kssk', 'kssk']); // a fist, one finger raised
+})();
+
+// --- the candle -----------------------------------------------------------------
+// Lit beside him for a quiet sit, in a little window of its own. The flame
+// leans and flickers; smoke curls off the top.
+const candleOf = (flame, smoke) => {
+  let rows = blank();
+  rows = stamp(rows, 8, 29, ['kkkkkkkk', '.kkkkkk.']);  // dish
+  rows = stamp(rows, 10, 24, ['kwwk', 'kwwk', 'kwgk', 'kwgk', 'kwgk']);  // the candle
+  rows = stamp(rows, 11, 23, ['k']);                     // wick
+  rows = stamp(rows, 10, 19, flame);
+  return smoke.reduce((out, [x, y]) => stamp(out, x, y, ['u']), rows);
+};
+const FLAMES = [
+  ['..y.', '.yy.', '.yry', '.rr.'],
+  ['.y..', '.yy.', 'yry.', '.rr.'],
+  ['..y.', '.yyy', '.yr.', '.rr.'],
+];
+const CANDLE = [
+  candleOf(FLAMES[0], [[12, 16], [11, 13], [12, 10]]),
+  candleOf(FLAMES[1], [[11, 15], [12, 12], [11, 9]]),
+  candleOf(FLAMES[2], [[12, 14], [12, 11], [13, 8]]),
+];
+
+// --- walking --------------------------------------------------------------
+// In profile, facing right; the app mirrors him to walk left. Dome and
+// shades lens at the front, the temple arm running back to the ear, the beard
+// jutting forward off the chin, a straight back. The near arm swings against
+// the stride.
+
+const PROFILE_TOP = [
+  /* 0 */ [],
+  /* 1 */ [[9, 14, 'k']],
+  /* 2 */ [[7, 8, 'k'], [9, 10, 'h'], [11, 14, 's'], [15, 16, 'k']],
+  /* 3 */ [[6, 6, 'k'], [7, 8, 'h'], [9, 16, 's'], [17, 17, 'k']],
+  /* 4 */ [[5, 5, 'k'], [6, 7, 'h'], [8, 17, 's'], [18, 18, 'k']],
+  /* 5 */ [[5, 5, 'k'], [6, 6, 'd'], [7, 18, 's'], [19, 19, 'k']],
+  /* 6 */ [[5, 5, 'k'], [6, 6, 'd'], [7, 18, 's'], [19, 19, 'k']],
+  /* 7 */ [[5, 5, 'k'], [6, 6, 'd'], [7, 9, 's'], [10, 14, 'f'], [15, 18, 'l'], [19, 19, 'k']],
+  /* 8 */ [[5, 5, 'k'], [6, 6, 'd'], [7, 8, 's'], [9, 10, 'd'], [11, 14, 's'], [15, 18, 'l'], [19, 19, 'k']],
+  /* 9 */ [[5, 5, 'k'], [6, 19, 's'], [20, 20, 'k']],
+  /* 10 */ [[6, 6, 'k'], [7, 8, 's'], [9, 19, 'w'], [20, 20, 'k']],
+  /* 11 */ [[4, 4, 'k'], [5, 8, 'b'], [9, 20, 'w'], [21, 21, 'k']],
+  /* 12 */ [[4, 4, 'k'], [5, 8, 'b'], [9, 11, 'w'], [12, 13, 'g'], [14, 20, 'w'], [21, 21, 'k']],
+  /* 13 */ [[4, 4, 'k'], [5, 8, 'b'], [9, 20, 'w'], [21, 21, 'k']],
+  /* 14 */ [[4, 4, 'k'], [5, 8, 'b'], [9, 20, 'w'], [21, 21, 'k']],
+  /* 15 */ [[4, 4, 'k'], [5, 8, 'b'], [9, 20, 'w'], [21, 21, 'k']],
+  /* 16 */ [[4, 4, 'k'], [5, 8, 'b'], [9, 20, 'w'], [21, 21, 'k']],
+  /* 17 */ [[4, 4, 'k'], [5, 8, 'b'], [9, 13, 'w'], [14, 15, 'g'], [16, 20, 'w'], [21, 21, 'k']],
+  /* 18 */ [[4, 4, 'k'], [5, 9, 'b'], [10, 20, 'w'], [21, 21, 'k']],
+  /* 19 */ [[4, 4, 'k'], [5, 10, 'b'], [11, 19, 'w'], [20, 20, 'k']],
+  /* 20 */ [[4, 4, 'k'], [5, 11, 'b'], [12, 19, 'w'], [20, 20, 'k']],
+  /* 21 */ [[4, 4, 'k'], [5, 12, 'b'], [13, 18, 'w'], [19, 19, 'k']],
+  /* 22 */ [[4, 4, 'k'], [5, 13, 'b'], [14, 18, 'w'], [19, 19, 'k']],
+  /* 23 */ [[4, 4, 'k'], [5, 14, 'b'], [15, 17, 'w'], [18, 18, 'k']],
+  /* 24 */ [[4, 4, 'k'], [5, 15, 'b'], [16, 16, 'g'], [17, 17, 'k']],
+  /* 25 */ [[4, 4, 'k'], [5, 16, 'b'], [17, 17, 'k']],
+  /* 26 */ [[4, 4, 'k'], [5, 15, 'b'], [16, 16, 'k']],
+].map(spans);
+
+const STRIDE = {
+  apart: [
+    [[5, 5, 'k'], [6, 8, 'b'], [9, 9, 'k'], [11, 11, 'k'], [12, 14, 'b'], [15, 15, 'k']],
+    [[4, 4, 'k'], [5, 7, 'b'], [8, 8, 'k'], [12, 12, 'k'], [13, 15, 'b'], [16, 16, 'k']],
+    [[3, 3, 'k'], [4, 6, 's'], [7, 7, 'k'], [13, 13, 'k'], [14, 16, 's'], [17, 17, 'k']],
+    [[2, 6, 'k'], [13, 18, 'k']],
+    [],
+  ].map(spans),
+  together: [
+    [[6, 6, 'k'], [7, 12, 'b'], [13, 13, 'k']],
+    [[7, 7, 'k'], [8, 12, 'b'], [13, 13, 'k']],
+    [[7, 7, 'k'], [8, 12, 's'], [13, 13, 'k']],
+    [[7, 14, 'k']],
+    [],
+  ].map(spans),
+};
+
+// The near arm: [col of the sleeve at rows 13-14, 15-16, 17-18, 19-20, hand].
+const SWING = { back: [8, 7, 6, 5, 5], hang: [8, 8, 8, 8, 8], forward: [8, 9, 10, 11, 12] };
+function walker(stride, swing) {
+  let rows = [...PROFILE_TOP, ...STRIDE[stride]];
+  SWING[swing].forEach((x, i) => {
+    rows = stamp(rows, x, 13 + i * 2, i < 4 ? ['nn', 'nn'] : ['ss', 'ss']);
+  });
+  // Planted on a stride, he's a pixel lower than passing through it.
+  return stride === 'apart' ? shiftBand(rows, 0, 26, 1) : rows;
+}
+const WALK = [walker('apart', 'forward'), walker('together', 'hang'), walker('apart', 'back'), walker('together', 'hang')];
+
+// --- picked up --------------------------------------------------------------
+// Arms up, hanging on; the legs kick a little. A "!" when you first grab him.
+const dangle = (kick) => stretchUp.map((row, y) => {
+  if (!kick || y < 27 || y > 30) return row;
+  // the left leg comes up a pixel: each of its rows takes the one below it
+  const below = y === 30 ? _(W) : stretchUp[y + 1];
+  return below.slice(0, 12) + row.slice(12);
+});
+const SURPRISE = [mark(19, -3, ['rr', 'rr', '..', 'rr'])];  // beside any hat
+
+// --- reacting to the work ----------------------------------------------------
+// A failed command: he flinches (a little frustration cross on the dome) and
+// puts his face in his palm. Getting past the failures: a fist in the air.
+
+const VEIN = [mark(18, -2, ['r.r', '.r.', 'r.r'])];
+const flinch = shiftBand(standing, 0, HEAD_BAND_END, 1);
+const facepalm = (() => {
+  let rows = stamp(standing, 19, 21, ['nn', 'nn']);        // that hand leaves the hip
+  for (let i = 0; i < 6; i++) rows = stamp(rows, 13 + i, 9 + i, ['nn']);  // forearm up across the beard
+  return stamp(rows, 8, 6, ['kkkkk', 'sssss', 'sssss']);   // palm over the shades
+})();
+const fistArm = (high) => {
+  let rows = standing;
+  for (let y = 14; y <= 22; y++) rows = stamp(rows, 19, y, ['bb']);  // the hanging arm comes up
+  if (high) {
+    for (let y = 6; y <= 13; y++) rows = stamp(rows, 20, y, ['nn']);
+    return stamp(rows, 19, 3, ['kkk', 'kssk', 'kssk'].map((r) => r.padEnd(4, '.')));
+  }
+  for (let y = 10; y <= 13; y++) rows = stamp(rows, 20, y, ['nn']);
+  return stamp(rows, 19, 7, ['kkkk', 'kssk', 'kssk']);
+};
+const FIST_SPARK = [mark(22, -1, ['r', '.', 'r'])];
+
+// --- asleep -------------------------------------------------------------------
+// Late, with nobody around, he nods off sitting up: chin on the beard, Z's
+// rising off him. Waking up is a stretch.
+const slumped = (extra) => shiftBand(sitting, 0, SIT_HEAD_END, 2 + extra);
+const Z = ['wwww', '..w.', '.w..', 'wwww'];
+const z = ['ww', 'ww'];
 
 // --- animations -------------------------------------------------------------
 // `next`      animation to settle into once a one-shot finishes; null loops.
@@ -714,6 +882,133 @@ const ANIMATIONS = {
     frames: PUFF.map((rows) => ({ rows, hold: 3 })),
   },
 
+  // Moments in the groove; each settles back into it.
+  feel: {
+    next: 'groove',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: feelIt, hold: 30 },
+      { rows: shiftBand(feelIt, 0, HEAD_BAND_END, 1), hold: 12 },
+      { rows: feelIt, hold: 30 },
+    ],
+  },
+  fingerup: {
+    next: 'groove',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: fingerUp, hold: 40 },
+      { rows: bob(fingerUp, 0), hold: 8 },
+      { rows: fingerUp, hold: 20 },
+    ],
+  },
+  sway: {
+    next: 'groove',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: bob(phonesOn, -1), hold: 18 },
+      { rows: phonesOn, hold: 9 },
+      { rows: bob(phonesOn, 1), hold: 18 },
+      { rows: phonesOn, hold: 9 },
+      { rows: bob(phonesOn, -1), hold: 18 },
+      { rows: phonesOn, hold: 9 },
+      { rows: bob(phonesOn, 1), hold: 18 },
+    ],
+  },
+
+  // The candle for a quiet sit. Drawn in its own window beside him.
+  candle: {
+    next: null,
+    internal: true,
+    shades: 'down',
+    frames: CANDLE.map((rows) => ({ rows, hold: 7 })),
+  },
+
+  // Strolling along a window's edge, in profile. Mirrored by the app to go left.
+  walk: {
+    next: null,
+    internal: true,
+    shades: 'down',
+    frames: WALK.map((rows) => ({ rows, hold: 6 })),
+  },
+
+  // Picked up: a "!" and arms up, then hanging on with a little kick.
+  grabbed: {
+    next: 'held',
+    internal: true,
+    shades: 'down',
+    frames: [{ rows: dangle(false), hold: 10, marks: SURPRISE }],
+  },
+  held: {
+    next: null,
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: dangle(false), hold: 9 },
+      { rows: dangle(true), hold: 9 },
+    ],
+  },
+
+  // A command failed: flinch, face in palm, a small shake of the head.
+  wince: {
+    next: 'idle',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: flinch, hold: 5, marks: VEIN },
+      { rows: facepalm, hold: 18, marks: VEIN },
+      { rows: shiftBandX(facepalm, 0, HEAD_BAND_END, 1), hold: 5 },
+      { rows: facepalm, hold: 12 },
+    ],
+  },
+
+  // Through the failures at last: a fist in the air, twice.
+  fistpump: {
+    next: 'idle',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: fistArm(false), hold: 4 },
+      { rows: fistArm(true), hold: 7, marks: FIST_SPARK },
+      { rows: fistArm(false), hold: 4 },
+      { rows: fistArm(true), hold: 12, marks: FIST_SPARK },
+      { rows: fistArm(false), hold: 4 },
+      { rows: glintAt(9), hold: 2 },
+      { rows: glintAt(13), hold: 2 },
+    ],
+  },
+
+  // A long task done: the slow nod, and the light catches the shades.
+  proud: {
+    next: 'idle',
+    internal: true,
+    shades: 'down',
+    frames: [
+      { rows: standing, hold: 8 },
+      { rows: shiftBand(standing, 0, HEAD_BAND_END, 1), hold: 10 },
+      { rows: shiftBand(standing, 0, HEAD_BAND_END, 2), hold: 24 },
+      { rows: shiftBand(standing, 0, HEAD_BAND_END, 1), hold: 10 },
+      { rows: standing, hold: 6 },
+      { rows: glintAt(7), hold: 2 },
+      { rows: glintAt(9), hold: 2 },
+      { rows: glintAt(13), hold: 2 },
+      { rows: glintAt(15), hold: 2 },
+    ],
+  },
+
+  // Asleep sitting up. Seated, so standing up comes first when he wakes.
+  sleep: {
+    next: null,
+    shades: 'down',
+    frames: [
+      { rows: slumped(0), hold: 34, marks: [mark(18, 5, Z)] },
+      { rows: slumped(1), hold: 34, marks: [mark(19, 1, Z), mark(17, 7, z)] },
+      { rows: slumped(0), hold: 34, marks: [mark(20, -3, Z), mark(18, 3, z)] },
+    ],
+  },
+
   // A short hop — nudged along the same edge, or a window a step away — skips
   // the ceremony: crouch, up, down. The app moves his window while `fly` plays.
   leap: {
@@ -787,9 +1082,80 @@ function rasterizeMask(rows, scale) {
 
 // --- rim light --------------------------------------------------------------
 
+// --- seasonal outfits ----------------------------------------------------------
+// A hat for the season, composed onto every frame where his dome shows. `ax`,
+// `ay`: where the first pixel of the top of his skull falls in the patch.
+const OUTFITS = {
+  // Halloween: a witch's hat, bent at the tip, with an orange band.
+  witch: { ax: 4, ay: 5, rows: [
+    '.........PP...',
+    '........PP....',
+    '......PPPQ....',
+    '.....PPPPQ....',
+    '....PPPPPPQ...',
+    '...rrrrrrrrr..',
+    'PPPPPPPPPPPPPP',
+  ] },
+  // A Santa hat, flopped over to one side, pom-pom and all.
+  santa: { ax: 3, ay: 4, rows: [
+    '..........XXX..',
+    '........XXXXXww',
+    '....XXXXXXXX.ww',
+    '..XXXXXXXXX....',
+    '.XXXXXXXXXX....',
+    'wwwwwwwwwwww...',
+  ] },
+  // Winter: a knitted beanie in Claude orange.
+  beanie: { ax: 3, ay: 3, rows: [
+    '.....ww.....',
+    '.....ww.....',
+    '....rrrr....',
+    '...rrrrrr...',
+    '.rrrrrrrrrr.',
+    'RRRRRRRRRRRR',
+  ] },
+  // New Year's: a striped party hat.
+  party: { ax: 0, ay: 4, rows: [
+    '...y..',
+    '..rr..',
+    '..ww..',
+    '.rrrr.',
+    '.wwww.',
+  ] },
+};
+
+/// The top of his dome: the first run of six outline pixels from the top.
+function dress(rows, outfit) {
+  const hat = OUTFITS[outfit];
+  const y0 = rows.findIndex((row) => row.includes('kkkkkk'));
+  if (!hat || y0 < 0) return rows;
+  const x0 = rows[y0].indexOf('kkkkkk');
+  return stamp(rows, x0 - hat.ax, y0 - hat.ay, hat.rows);
+}
+
+// Empty rows added over every frame: room above his head for marks (and, in
+// season, a hat). The app stands him on his feet, so it never sees them.
+const HEADROOM = 4;
+
 const RIM_PAD = 1;
 const OUT_W = W + RIM_PAD * 2;
-const OUT_H = H + RIM_PAD * 2;
+const OUT_H = H + HEADROOM + RIM_PAD * 2;
+
+/// A frame's rows as they're built: headroom on top, the outfit if there is
+/// one, then the marks drawn over it all — every row checked against the grid
+/// and the palette. A spinning frame is dressed before it turns.
+function prepare(frame, label, outfit) {
+  const base = outfit && frame.spin ? spun(dress(frame.spin.seated, outfit), frame.spin.turns) : frame.rows;
+  let rows = [...Array(HEADROOM).fill(_(W)), ...base];
+  if (outfit && !frame.spin) rows = dress(rows, outfit);
+  for (const { x, y, patch } of frame.marks ?? []) rows = stamp(rows, x, y + HEADROOM, patch);
+  if (rows.length !== H + HEADROOM) throw new Error(`${label}: ${rows.length} rows`);
+  rows.forEach((row, y) => {
+    if (row.length !== W) throw new Error(`${label} row ${y}: width ${row.length}`);
+    for (const ch of row) if (!(ch in PALETTE)) throw new Error(`${label} row ${y}: "${ch}"`);
+  });
+  return rows;
+}
 
 /// Pad by one pixel all round, then set every transparent pixel touching the
 /// silhouette to the rim colour. 8-connected, so diagonal steps down the beard
@@ -884,6 +1250,6 @@ function rasterize(rows, scale) {
 }
 
 module.exports = {
-  W, H, OUT_W, OUT_H, PALETTE, ANIMATIONS, MENU_ICON, rasterize, rasterizeMask, withRim,
-  withShadow,
+  W, H, OUT_W, OUT_H, HEADROOM, PALETTE, ANIMATIONS, OUTFITS, MENU_ICON, rasterize,
+  rasterizeMask, withRim, withShadow, prepare,
 };
